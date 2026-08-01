@@ -202,6 +202,8 @@
   }
   .at-check:hover{border-color:var(--accent); color:var(--accent);}
   .at-tracker.done .at-check{background:var(--accent); color:#06120F; border-color:var(--accent); font-weight:700;}
+  .at-check:disabled{opacity:.5; cursor:not-allowed;}
+  .at-check:disabled:hover{border-color:var(--line); color:var(--muted);}
 
   .at-el{
     margin-top:12px; background:var(--surface2); border:1px solid var(--line); border-radius:10px; padding:10px 12px;
@@ -373,6 +375,8 @@
   let activeTab = 'ALL';
   let tickHandle = null;
   const EL_CAP = 500000; // EDY2 sell limit per account
+  const POINTS_CAP = 20000; // DSCP points cap per account
+  const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
 
   function uid(){ return 'acc_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
@@ -573,6 +577,25 @@
       `;
       wrap.appendChild(card);
     }
+
+    const dscpAccounts = filtered.filter(a=>a.server==='DSCPY2');
+    if(dscpAccounts.length){
+      const totalPoints = dscpAccounts.reduce((sum,a)=> sum + (Math.max(0, Number(a.points)) || 0), 0);
+      const totalCap = dscpAccounts.length * POINTS_CAP;
+      const remaining = Math.max(0, totalCap - totalPoints);
+      const pct = totalCap ? Math.round((totalPoints/totalCap)*100) : 0;
+      const card = document.createElement('div');
+      card.className = 'at-progress-card';
+      card.innerHTML = `
+        <div class="at-progress-head">
+          <span class="at-progress-title">Total points · ${dscpAccounts.length} DSCP acct${dscpAccounts.length===1?'':'s'}</span>
+          <span class="at-progress-count">${totalPoints.toLocaleString()} / ${totalCap.toLocaleString()}</span>
+        </div>
+        <div class="at-progress-bar"><div class="at-progress-fill" style="width:${pct}%"></div></div>
+        <p class="at-hint">${remaining.toLocaleString()} points left across all DSCP accounts</p>
+      `;
+      wrap.appendChild(card);
+    }
   }
 
   function updateHud(){
@@ -745,6 +768,116 @@
     return wrap;
   }
 
+  function pointsNode(account){
+    const used = Math.max(0, Number(account.points) || 0);
+    const pct = Math.min(100, Math.round((used/POINTS_CAP)*100));
+    const isFull = used >= POINTS_CAP;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'at-el';
+
+    const head = document.createElement('div'); head.className='at-el-head';
+    const label = document.createElement('span'); label.className='at-el-label'; label.textContent='Points';
+    const amount = document.createElement('span'); amount.className='at-el-amount'+(isFull?' full':'');
+    amount.textContent = used.toLocaleString() + ' / ' + POINTS_CAP.toLocaleString() + (isFull?' · CAP':'');
+    head.appendChild(label); head.appendChild(amount);
+
+    const bar = document.createElement('div'); bar.className='at-el-bar';
+    const fill = document.createElement('div'); fill.className='at-el-fill'+(isFull?' full':'');
+    fill.style.width = pct+'%';
+    bar.appendChild(fill);
+
+    const editRow = document.createElement('div'); editRow.className='at-el-editrow';
+    const input = document.createElement('input');
+    input.type='number'; input.className='at-el-input'; input.placeholder='Points';
+    input.min='0';
+    const setBtn = document.createElement('button');
+    setBtn.className='at-btn small'; setBtn.textContent='Set total';
+    setBtn.title = 'Set the total points on this account so far';
+    const addBtn = document.createElement('button');
+    addBtn.className='at-btn small'; addBtn.textContent='+ Add';
+    addBtn.title = 'Add this amount to the running total';
+    const resetBtn = document.createElement('button');
+    resetBtn.className='at-btn small ghost'; resetBtn.textContent='Reset';
+    resetBtn.title = 'Reset points back to 0';
+
+    async function commit(newVal){
+      account.points = Math.max(0, newVal);
+      await saveAccounts();
+      renderAll();
+    }
+    setBtn.onclick = ()=>{
+      const v = parseFloat(input.value);
+      if(!isNaN(v)) commit(v);
+    };
+    addBtn.onclick = ()=>{
+      const v = parseFloat(input.value);
+      if(!isNaN(v)) commit(used + v);
+    };
+    resetBtn.onclick = async ()=>{
+      const ok = await showConfirm('Reset points for '+(account.name||'this account')+' back to 0?', 'Reset');
+      if(ok) commit(0);
+    };
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
+
+    editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
+
+    wrap.appendChild(head); wrap.appendChild(bar); wrap.appendChild(editRow);
+    return wrap;
+  }
+
+  function inheritNode(account){
+    const now = Date.now();
+    const last = account.inheritDone || null;
+    const nextAvail = last ? last + INHERIT_COOLDOWN_MS : null;
+    const onCooldown = !!(nextAvail && nextAvail > now);
+
+    const row = document.createElement('div');
+    row.className = 'at-tracker' + (!onCooldown ? ' done' : '') + (onCooldown && (nextAvail-now) < 3600000 ? ' urgent':'');
+
+    const left = document.createElement('div');
+    left.className = 'at-tracker-left';
+    const dot = document.createElement('span'); dot.className='at-dot';
+    const labelWrap = document.createElement('div');
+    const label = document.createElement('div'); label.className='at-tracker-label';
+    label.textContent = 'Inherit deviant · 7d cd';
+    const timer = document.createElement('div'); timer.className='at-tracker-timer';
+    timer.textContent = onCooldown ? ('available in ' + fmtCountdown(nextAvail-now)) : (last ? 'ready to inherit' : 'never inherited');
+    labelWrap.appendChild(label); labelWrap.appendChild(timer);
+    left.appendChild(dot); left.appendChild(labelWrap);
+
+    const btn = document.createElement('button');
+    btn.className = 'at-check';
+    btn.textContent = onCooldown ? 'On cooldown' : 'Mark inherited';
+    btn.disabled = onCooldown;
+    btn.onclick = async ()=>{
+      if(btn.disabled) return;
+      account.inheritDone = Date.now();
+      await saveAccounts();
+      renderAll();
+    };
+
+    row.appendChild(left);
+    row.appendChild(btn);
+    row._timerNode = timer;
+    row._recalc = ()=>{
+      const now2 = Date.now();
+      const last2 = account.inheritDone || null;
+      const nextAvail2 = last2 ? last2 + INHERIT_COOLDOWN_MS : null;
+      const onCd2 = !!(nextAvail2 && nextAvail2 > now2);
+      timer.textContent = onCd2 ? ('available in ' + fmtCountdown(nextAvail2-now2)) : (last2 ? 'ready to inherit' : 'never inherited');
+      const stillUrgent = onCd2 && (nextAvail2-now2) < 3600000;
+      row.classList.toggle('done', !onCd2);
+      row.classList.toggle('urgent', stillUrgent);
+      const b = row.querySelector('.at-check');
+      if(b){
+        b.disabled = onCd2;
+        b.textContent = onCd2 ? 'On cooldown' : 'Mark inherited';
+      }
+    };
+    return row;
+  }
+
   function cardNode(account){
     const card = document.createElement('div');
     card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : '');
@@ -791,10 +924,16 @@
     const trackers = document.createElement('div'); trackers.className='at-trackers';
     trackers.appendChild(trackerNode(account,'relic'));
     trackers.appendChild(trackerNode(account,'ufo'));
+    if(account.server==='DSCPY2'){
+      trackers.appendChild(inheritNode(account));
+    }
     card.appendChild(trackers);
 
     if(account.server==='EDY2'){
       card.appendChild(elNode(account));
+    }
+    if(account.server==='DSCPY2'){
+      card.appendChild(pointsNode(account));
     }
 
     return card;
@@ -949,7 +1088,7 @@
       if(isEdit){
         existing.name=name; existing.role=role; existing.server=server; existing.steamGroup=steamGroup;
       } else {
-        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, el:0});
+        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, el:0, points:0, inheritDone:null});
       }
       await saveAccounts();
       backdrop.remove();
