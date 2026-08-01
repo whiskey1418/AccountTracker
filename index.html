@@ -190,10 +190,16 @@
   .at-cardhead{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;}
   .at-cardhead-left{display:flex; align-items:flex-start; gap:10px; min-width:0;}
   .at-type-icon{
-    font-size:17px; line-height:1; flex-shrink:0; margin-top:1px; width:30px; height:30px;
+    font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:.5px;
+    line-height:1; flex-shrink:0; margin-top:1px; width:30px; height:30px;
     display:flex; align-items:center; justify-content:center; border-radius:9px;
     background:var(--surface2); border:1px solid var(--line);
   }
+  .at-dot-tag{
+    display:inline-block; width:7px; height:7px; border-radius:2px; margin-right:6px;
+    vertical-align:middle; box-shadow:0 0 6px currentColor;
+  }
+  .at-hud-sep{color:var(--line); margin:0 1px;}
   .at-name{font-family:var(--font-display); font-size:16px; font-weight:600; margin:0 0 4px; letter-spacing:.2px;}
   .at-meta{font-size:11px; color:var(--muted); font-family:var(--font-mono); letter-spacing:.5px;}
   .at-card.dscp .at-meta{color:var(--signal);}
@@ -357,7 +363,7 @@
         <span class="at-status-pill">Live tracking</span>
         <p class="at-eyebrow">// account control</p>
         <h1 class="at-title">Zsammy Tracker</h1>
-        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily), UFO (weekly), and the 7-day Inherit Deviant cooldown.</p>
+        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (weekly, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
       </div>
       <div class="at-radar"></div>
     </div>
@@ -377,7 +383,7 @@
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
         <span class="at-hud-value" id="hudTotal">0</span>
-        <span class="at-hud-breakdown" id="hudBreakdown">🌱0 · 🛰️0 · 🧬0</span>
+        <span class="at-hud-breakdown" id="hudBreakdown"></span>
       </div>
     </div>
   </div>
@@ -408,15 +414,20 @@
   const STORAGE_KEY = 'roster-accounts';
   const SERVERS = [
     {id:'ALL', label:'All'},
-    {id:'EDY2', label:'🌱 EDY2'},
-    {id:'DSCPY2', label:'🛰️ DSCP Y2'},
-    {id:'INHERIT', label:'🧬 Inherit'}
+    {id:'EDY2', label:'EDY2'},
+    {id:'DSCPY2', label:'DSCP Y2'},
+    {id:'INHERIT', label:'Inherit'}
   ];
-  function serverIcon(server){
-    if(server==='EDY2') return '🌱';
-    if(server==='DSCPY2') return '🛰️';
-    if(server==='INHERIT') return '🧬';
-    return '•';
+  const SERVER_COLOR = { EDY2:'var(--accent)', DSCPY2:'var(--signal)', INHERIT:'var(--inherit)' };
+  function serverColor(server){ return SERVER_COLOR[server] || 'var(--muted)'; }
+  function serverCode(server){
+    if(server==='EDY2') return 'ED';
+    if(server==='DSCPY2') return 'DS';
+    if(server==='INHERIT') return 'IN';
+    return '--';
+  }
+  function serverDot(server){
+    return '<span class="at-dot-tag" style="background:'+serverColor(server)+'"></span>';
   }
   function serverLabel(server){
     if(server==='EDY2') return 'EDY2';
@@ -594,11 +605,12 @@
     wrap.innerHTML = '';
     if(filtered.length===0){ return; }
     [
-      {key:'relic', label:'RELIC · today'},
-      {key:'ufo', label:'UFO · this week'}
+      {key:'relic', label:'RELIC · today', scope: filtered},
+      {key:'ufo', label:'UFO · this week', scope: filtered.filter(a=>a.server==='EDY2')}
     ].forEach(cfg=>{
-      const done = filtered.filter(a=>isAccountDone(a, cfg.key)).length;
-      const total = filtered.length;
+      const total = cfg.scope.length;
+      if(total===0) return;
+      const done = cfg.scope.filter(a=>isAccountDone(a, cfg.key)).length;
       const pct = total ? Math.round((done/total)*100) : 0;
       const card = document.createElement('div');
       card.className = 'at-progress-card';
@@ -641,7 +653,7 @@
       card.className = 'at-progress-card';
       card.innerHTML = `
         <div class="at-progress-head">
-          <span class="at-progress-title">🧬 Total points · ${dscpAccounts.length} Inherit acct${dscpAccounts.length===1?'':'s'}</span>
+          <span class="at-progress-title">${serverDot('INHERIT')}Total points · ${dscpAccounts.length} Inherit acct${dscpAccounts.length===1?'':'s'}</span>
           <span class="at-progress-count">${totalPoints.toLocaleString()} / ${totalCap.toLocaleString()}</span>
         </div>
         <div class="at-progress-bar"><div class="at-progress-fill inherit" style="width:${pct}%"></div></div>
@@ -678,7 +690,10 @@
     if(breakdownEl){
       const c = {EDY2:0, DSCPY2:0, INHERIT:0};
       accounts.forEach(a=>{ if(c[a.server]!==undefined) c[a.server]++; });
-      breakdownEl.textContent = '🌱'+c.EDY2+' · 🛰️'+c.DSCPY2+' · 🧬'+c.INHERIT;
+      breakdownEl.innerHTML =
+        serverDot('EDY2')+'ED '+c.EDY2+
+        ' <span class="at-hud-sep">·</span> '+serverDot('DSCPY2')+'DS '+c.DSCPY2+
+        ' <span class="at-hud-sep">·</span> '+serverDot('INHERIT')+'IN '+c.INHERIT;
     }
   }
 
@@ -690,7 +705,8 @@
       const btn = document.createElement('button');
       btn.className = 'at-tab' + (activeTab===s.id ? ' active' : '');
       const count = s.id==='ALL' ? accounts.length : accounts.filter(a=>a.server===s.id).length;
-      btn.textContent = s.label + ' · ' + count;
+      const dotHtml = s.id==='ALL' ? '' : serverDot(s.id);
+      btn.innerHTML = dotHtml + s.label + ' · ' + count;
       btn.onclick = ()=>{ activeTab = s.id; renderAll(); };
       wrap.appendChild(btn);
     });
@@ -944,7 +960,9 @@
     const head = document.createElement('div');
     head.className = 'at-cardhead';
     const left = document.createElement('div'); left.className='at-cardhead-left';
-    const typeIcon = document.createElement('span'); typeIcon.className='at-type-icon'; typeIcon.textContent = serverIcon(account.server);
+    const typeIcon = document.createElement('span'); typeIcon.className='at-type-icon';
+    typeIcon.style.color = serverColor(account.server);
+    typeIcon.textContent = serverCode(account.server);
     const textCol = document.createElement('div');
     const name = document.createElement('p'); name.className='at-name'; name.textContent = account.name || 'Unnamed account';
     const meta = document.createElement('div'); meta.className='at-meta';
@@ -985,7 +1003,9 @@
 
     const trackers = document.createElement('div'); trackers.className='at-trackers';
     trackers.appendChild(trackerNode(account,'relic'));
-    trackers.appendChild(trackerNode(account,'ufo'));
+    if(account.server==='EDY2'){
+      trackers.appendChild(trackerNode(account,'ufo'));
+    }
     if(account.server==='INHERIT'){
       trackers.appendChild(inheritNode(account));
     }
@@ -1076,9 +1096,9 @@
         <h3>${isEdit ? 'Edit account' : 'Add account'}</h3>
         <label>Server</label>
         <select class="at-select" id="mServer">
-          <option value="EDY2">🌱 EDY2</option>
-          <option value="DSCPY2">🛰️ DSCP Y2</option>
-          <option value="INHERIT">🧬 Inherit (DSCP Y2)</option>
+          <option value="EDY2">EDY2</option>
+          <option value="DSCPY2">DSCP Y2</option>
+          <option value="INHERIT">Inherit (DSCP Y2)</option>
         </select>
         <label>Account name</label>
         <input class="at-input" id="mName" placeholder="e.g. Main, Alt 1..." />
