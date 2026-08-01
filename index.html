@@ -38,6 +38,7 @@
   *{box-sizing:border-box;}
   body,.at-root{margin:0;padding:0;color:var(--text);font-family:var(--font-body);}
   .at-root{
+    max-width:1180px; margin:0 auto;
     padding:22px 18px 44px; min-height:100vh; position:relative; overflow:hidden;
     background:
       radial-gradient(ellipse 900px 500px at 15% -10%, rgba(111,255,176,0.07), transparent 60%),
@@ -52,19 +53,38 @@
 
   /* ---- Header console ---- */
   .at-scanline{
-    position:relative; padding:22px 24px; border:1px solid var(--line); border-radius:16px;
-    background:linear-gradient(160deg, rgba(111,255,176,0.06), rgba(111,255,176,0) 55%), var(--surface);
-    margin-bottom:20px; overflow:hidden;
-    box-shadow:0 20px 50px -30px rgba(0,0,0,0.7);
+    position:relative; padding:24px 26px; border:1px solid var(--line); border-radius:18px;
+    background:linear-gradient(160deg, rgba(111,255,176,0.07), rgba(111,255,176,0) 55%), var(--surface);
+    margin-bottom:22px; overflow:hidden;
+    box-shadow:0 24px 60px -32px rgba(0,0,0,0.75);
   }
   .at-scanline::before{
     content:''; position:absolute; left:0; right:0; top:0; height:2px;
     background:linear-gradient(90deg, transparent, var(--accent), var(--signal), transparent);
-    opacity:0.55;
+    opacity:0.6;
+  }
+  .at-scanline::after{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:
+      linear-gradient(rgba(111,255,176,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(111,255,176,0.035) 1px, transparent 1px);
+    background-size:26px 26px;
+    -webkit-mask-image:radial-gradient(ellipse 100% 100% at 100% 0%, #000 0%, transparent 65%);
+    mask-image:radial-gradient(ellipse 100% 100% at 100% 0%, #000 0%, transparent 65%);
+  }
+  .at-scanhead{display:flex; align-items:flex-start; justify-content:space-between; gap:16px;}
+  .at-status-pill{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10px;
+    letter-spacing:1.5px; color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-dim);
+    border-radius:999px; padding:4px 10px; text-transform:uppercase; margin-bottom:10px;
+  }
+  .at-status-pill::before{
+    content:''; width:6px; height:6px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 8px var(--accent); animation:pulse-dot 1.6s ease-in-out infinite;
   }
   .at-radar{
-    position:absolute; top:18px; right:20px; width:56px; height:56px; border-radius:50%;
-    border:1px solid var(--line); background:radial-gradient(circle, rgba(111,255,176,0.05), transparent 70%);
+    position:relative; top:0; right:0; width:52px; height:52px; border-radius:50%; flex-shrink:0;
+    border:1px solid var(--line); background:radial-gradient(circle, rgba(111,255,176,0.06), transparent 70%);
     overflow:hidden; pointer-events:none;
   }
   .at-radar::before{
@@ -73,33 +93,36 @@
     animation:radar-spin 3.4s linear infinite;
   }
   .at-radar::after{
-    content:''; position:absolute; inset:10px; border-radius:50%; border:1px solid rgba(111,255,176,0.25);
+    content:''; position:absolute; inset:9px; border-radius:50%; border:1px solid rgba(111,255,176,0.25);
   }
   @keyframes radar-spin{ to{ transform:rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce){ .at-radar::before{ animation:none; } }
+  @media (prefers-reduced-motion: reduce){ .at-radar::before{ animation:none; } .at-status-pill::before{ animation:none; } }
+  @media (max-width:520px){ .at-radar{ display:none; } }
 
-  .at-headtext{max-width:calc(100% - 76px);}
+  .at-headtext{max-width:100%; position:relative; z-index:1;}
   .at-eyebrow{
     font-family:var(--font-mono); font-size:11px; letter-spacing:3px; color:var(--accent);
     text-transform:uppercase; margin:0 0 8px;
   }
   .at-title{
-    font-family:var(--font-display); font-size:26px; font-weight:700; letter-spacing:.2px; margin:0 0 6px; color:var(--text);
+    font-family:var(--font-display); font-size:clamp(22px,3.4vw,28px); font-weight:700; letter-spacing:.2px; margin:0 0 6px; color:var(--text);
   }
-  .at-sub{font-size:13px; color:var(--muted); margin:0; line-height:1.5;}
+  .at-sub{font-size:13px; color:var(--muted); margin:0; line-height:1.55; max-width:640px;}
 
   .at-hud{
-    display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; padding-top:16px;
-    border-top:1px solid var(--line-soft);
+    display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; padding-top:18px;
+    border-top:1px solid var(--line-soft); position:relative; z-index:1;
   }
   .at-hud-chip{
     font-family:var(--font-mono); font-size:11px; color:var(--muted);
-    background:var(--surface2); border:1px solid var(--line); border-radius:9px;
-    padding:9px 13px; display:flex; flex-direction:column; gap:3px; min-width:128px;
-    transition:border-color .2s;
+    background:var(--surface2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px; display:flex; flex-direction:column; gap:4px; flex:1 1 150px; min-width:140px;
+    transition:border-color .2s, transform .2s;
   }
+  .at-hud-chip:hover{border-color:var(--accent-dim); transform:translateY(-1px);}
   .at-hud-chip .at-hud-label{letter-spacing:1.5px; text-transform:uppercase; font-size:9.5px; color:var(--signal);}
-  .at-hud-chip .at-hud-value{font-size:15px; color:var(--text); font-weight:600; font-variant-numeric:tabular-nums;}
+  .at-hud-chip .at-hud-value{font-size:16px; color:var(--text); font-weight:600; font-variant-numeric:tabular-nums;}
+  .at-hud-chip .at-hud-breakdown{font-size:10px; color:var(--muted); letter-spacing:.3px;}
   .at-hud-chip.urgent{border-color:rgba(255,180,84,0.4);}
   .at-hud-chip.urgent .at-hud-value{color:var(--warn);}
 
@@ -329,11 +352,14 @@
   <canvas id="atStars"></canvas>
   <div class="at-content">
   <div class="at-scanline">
-    <div class="at-radar"></div>
-    <div class="at-headtext">
-      <p class="at-eyebrow">// account control</p>
-      <h1 class="at-title">Zsammy Tracker</h1>
-      <p class="at-sub">EDY2 &amp; DSCP Y2 — accounts, roles, and reset windows for RELIC (daily) and UFO (weekly).</p>
+    <div class="at-scanhead">
+      <div class="at-headtext">
+        <span class="at-status-pill">Live tracking</span>
+        <p class="at-eyebrow">// account control</p>
+        <h1 class="at-title">Zsammy Tracker</h1>
+        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily), UFO (weekly), and the 7-day Inherit Deviant cooldown.</p>
+      </div>
+      <div class="at-radar"></div>
     </div>
     <div class="at-hud">
       <div class="at-hud-chip">
@@ -349,8 +375,9 @@
         <span class="at-hud-value" id="hudWeekly">--</span>
       </div>
       <div class="at-hud-chip">
-        <span class="at-hud-label">Total accounts</span>
+        <span class="at-hud-label">Roster</span>
         <span class="at-hud-value" id="hudTotal">0</span>
+        <span class="at-hud-breakdown" id="hudBreakdown">🌱0 · 🛰️0 · 🧬0</span>
       </div>
     </div>
   </div>
@@ -647,6 +674,12 @@
 
     const totalEl = document.getElementById('hudTotal');
     if(totalEl) totalEl.textContent = accounts.length;
+    const breakdownEl = document.getElementById('hudBreakdown');
+    if(breakdownEl){
+      const c = {EDY2:0, DSCPY2:0, INHERIT:0};
+      accounts.forEach(a=>{ if(c[a.server]!==undefined) c[a.server]++; });
+      breakdownEl.textContent = '🌱'+c.EDY2+' · 🛰️'+c.DSCPY2+' · 🧬'+c.INHERIT;
+    }
   }
 
   // ---------- Rendering ----------
