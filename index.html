@@ -866,11 +866,11 @@
         <input class="at-input" id="mName" placeholder="e.g. Main, Alt 1..." />
         <label>Steam login</label>
         <select class="at-select" id="mSteam">
-          <option value="Steam 1">Steam 1</option>
-          <option value="Steam 2">Steam 2</option>
-          <option value="Steam 3">Steam 3</option>
-          <option value="Steam 4">Steam 4</option>
-          <option value="Steam 5">Steam 5</option>
+          <option value="Steam 1 - artemis14180">Steam 1 - artemis14180</option>
+          <option value="Steam 2 - artemis1418">Steam 2 - artemis1418</option>
+          <option value="Steam 3 - whiskey141800">Steam 3 - whiskey141800</option>
+          <option value="Steam 4 - zsammy18">Steam 4 - zsammy18</option>
+          <option value="Steam 5 - zsammypaypal">Steam 5 - zsammypaypal</option>
           <option value="Steam 6">Steam 6</option>
           <option value="Steam 7">Steam 7</option>
           <option value="Steam 8">Steam 8</option>
@@ -909,7 +909,7 @@
     if(isEdit){
       serverSel.value = existing.server;
       backdrop.querySelector('#mName').value = existing.name||'';
-      backdrop.querySelector('#mSteam').value = existing.steamGroup||'Steam 1';
+      backdrop.querySelector('#mSteam').value = existing.steamGroup||'Steam 1 - artemis14180';
     }
     populateRoles(serverSel.value, isEdit ? existing.role : null);
     serverSel.addEventListener('change', ()=> populateRoles(serverSel.value, null));
