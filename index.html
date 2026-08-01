@@ -1103,19 +1103,20 @@
         <label>Account name</label>
         <input class="at-input" id="mName" placeholder="e.g. Main, Alt 1..." />
         <label>Steam login</label>
-        <select class="at-select" id="mSteam">
-          <option value="Steam 1 - artemis14180">Steam 1 - artemis14180</option>
-          <option value="Steam 2 - artemis1418">Steam 2 - artemis1418</option>
-          <option value="Steam 3 - whiskey141800">Steam 3 - whiskey141800</option>
-          <option value="Steam 4 - zsammy18">Steam 4 - zsammy18</option>
-          <option value="Steam 5 - zsammypaypal">Steam 5 - zsammypaypal</option>
-          <option value="Steam 6">Steam 6</option>
-          <option value="Steam 7">Steam 7</option>
-          <option value="Steam 8">Steam 8</option>
-          <option value="Steam 9">Steam 9</option>
-          <option value="Steam 10">Steam 10</option>
-        </select>
-        <p class="at-hint">Accounts sharing the same Steam login auto-share RELIC completion (UFO stays per-account).</p>
+        <input class="at-input" id="mSteam" list="mSteamList" placeholder="e.g. Steam 6 - yourname" />
+        <datalist id="mSteamList">
+          <option value="Steam 1 - artemis14180">
+          <option value="Steam 2 - artemis1418">
+          <option value="Steam 3 - whiskey141800">
+          <option value="Steam 4 - zsammy18">
+          <option value="Steam 5 - zsammypaypal">
+          <option value="Steam 6">
+          <option value="Steam 7">
+          <option value="Steam 8">
+          <option value="Steam 9">
+          <option value="Steam 10">
+        </datalist>
+        <p class="at-hint">Accounts sharing the same Steam login auto-share RELIC completion (UFO stays per-account). Type your own name after "Steam 6" (etc.) to label it — e.g. "Steam 6 - myname". Keep the exact same text on every account that shares that login, or they won't be grouped together.</p>
         <label>Role</label>
         <select class="at-select" id="mRole"></select>
         <p class="at-hint" id="mRoleHint"></p>
@@ -1150,6 +1151,8 @@
       serverSel.value = existing.server;
       backdrop.querySelector('#mName').value = existing.name||'';
       backdrop.querySelector('#mSteam').value = existing.steamGroup||'Steam 1 - artemis14180';
+    } else {
+      backdrop.querySelector('#mSteam').value = 'Steam 1 - artemis14180';
     }
     populateRoles(serverSel.value, isEdit ? existing.role : null);
     serverSel.addEventListener('change', ()=> populateRoles(serverSel.value, null));
