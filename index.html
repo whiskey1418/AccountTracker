@@ -203,6 +203,24 @@
   .at-check:hover{border-color:var(--accent); color:var(--accent);}
   .at-tracker.done .at-check{background:var(--accent); color:#06120F; border-color:var(--accent); font-weight:700;}
 
+  .at-el{
+    margin-top:12px; background:var(--surface2); border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+  }
+  .at-el-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; gap:8px;}
+  .at-el-label{font-size:12.5px; font-weight:600;}
+  .at-el-amount{font-family:var(--font-mono); font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .at-el-amount.full{color:var(--warn);}
+  .at-el-bar{height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-bottom:9px;}
+  .at-el-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .3s;}
+  .at-el-fill.full{background:linear-gradient(90deg, var(--warn), var(--danger));}
+  .at-el-editrow{display:flex; gap:6px; align-items:center;}
+  .at-el-input{
+    flex:1; min-width:0; background:var(--surface); border:1px solid var(--line); color:var(--text);
+    border-radius:7px; padding:6px 8px; font-size:12px; font-family:var(--font-mono);
+  }
+  .at-el-input:focus{outline:none; border-color:var(--accent);}
+  .at-el-editrow .at-btn{padding:6px 10px; font-size:11px;}
+
   .at-empty{
     text-align:center; padding:56px 20px; color:var(--muted); font-size:13px;
     border:1px dashed var(--line); border-radius:14px; grid-column:1/-1;
@@ -315,6 +333,10 @@
         <span class="at-hud-label">Weekly reset in</span>
         <span class="at-hud-value" id="hudWeekly">--</span>
       </div>
+      <div class="at-hud-chip">
+        <span class="at-hud-label">Total accounts</span>
+        <span class="at-hud-value" id="hudTotal">0</span>
+      </div>
     </div>
   </div>
 
@@ -350,6 +372,7 @@
   let accounts = [];
   let activeTab = 'ALL';
   let tickHandle = null;
+  const EL_CAP = 500000; // EDY2 sell limit per account
 
   function uid(){ return 'acc_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
@@ -538,6 +561,9 @@
     if(weeklyEl) weeklyEl.textContent = fmtCountdown(weeklyMs);
     const weeklyChip = document.getElementById('hudWeeklyChip');
     if(weeklyChip) weeklyChip.classList.toggle('urgent', weeklyMs < 3600000);
+
+    const totalEl = document.getElementById('hudTotal');
+    if(totalEl) totalEl.textContent = accounts.length;
   }
 
   // ---------- Rendering ----------
@@ -547,10 +573,26 @@
     SERVERS.forEach(s=>{
       const btn = document.createElement('button');
       btn.className = 'at-tab' + (activeTab===s.id ? ' active' : '');
-      btn.textContent = s.label;
+      const count = s.id==='ALL' ? accounts.length : accounts.filter(a=>a.server===s.id).length;
+      btn.textContent = s.label + ' · ' + count;
       btn.onclick = ()=>{ activeTab = s.id; renderAll(); };
       wrap.appendChild(btn);
     });
+  }
+
+  // Reorder an account up/down within its Steam-login group (matches the
+  // grouping used in renderGrid), so manual ordering sticks between reloads.
+  function moveAccount(id, dir){
+    const acc = accounts.find(a=>a.id===id);
+    if(!acc) return;
+    const key = acc.steamGroup ? acc.steamGroup.trim() : '';
+    const idxs = [];
+    accounts.forEach((a,i)=>{ if((a.steamGroup ? a.steamGroup.trim() : '')===key) idxs.push(i); });
+    const pos = idxs.indexOf(accounts.indexOf(acc));
+    const swapPos = pos + dir;
+    if(swapPos < 0 || swapPos >= idxs.length) return;
+    const i1 = idxs[pos], i2 = idxs[swapPos];
+    const tmp = accounts[i1]; accounts[i1] = accounts[i2]; accounts[i2] = tmp;
   }
 
   function trackerNode(account, type){
@@ -611,6 +653,64 @@
     return row;
   }
 
+  function elNode(account){
+    const used = Math.max(0, Number(account.el) || 0);
+    const pct = Math.min(100, Math.round((used/EL_CAP)*100));
+    const isFull = used >= EL_CAP;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'at-el';
+
+    const head = document.createElement('div'); head.className='at-el-head';
+    const label = document.createElement('span'); label.className='at-el-label'; label.textContent='EL sold';
+    const amount = document.createElement('span'); amount.className='at-el-amount'+(isFull?' full':'');
+    amount.textContent = used.toLocaleString() + ' / ' + EL_CAP.toLocaleString() + (isFull?' · LIMIT':'');
+    head.appendChild(label); head.appendChild(amount);
+
+    const bar = document.createElement('div'); bar.className='at-el-bar';
+    const fill = document.createElement('div'); fill.className='at-el-fill'+(isFull?' full':'');
+    fill.style.width = pct+'%';
+    bar.appendChild(fill);
+
+    const editRow = document.createElement('div'); editRow.className='at-el-editrow';
+    const input = document.createElement('input');
+    input.type='number'; input.className='at-el-input'; input.placeholder='Amount sold';
+    input.min='0';
+    const setBtn = document.createElement('button');
+    setBtn.className='at-btn small'; setBtn.textContent='Set total';
+    setBtn.title = 'Set the total EL sold on this account so far';
+    const addBtn = document.createElement('button');
+    addBtn.className='at-btn small'; addBtn.textContent='+ Add';
+    addBtn.title = 'Add this amount to the running total';
+    const resetBtn = document.createElement('button');
+    resetBtn.className='at-btn small ghost'; resetBtn.textContent='Reset';
+    resetBtn.title = 'Reset EL sold back to 0';
+
+    async function commit(newVal){
+      account.el = Math.max(0, newVal);
+      await saveAccounts();
+      renderAll();
+    }
+    setBtn.onclick = ()=>{
+      const v = parseFloat(input.value);
+      if(!isNaN(v)) commit(v);
+    };
+    addBtn.onclick = ()=>{
+      const v = parseFloat(input.value);
+      if(!isNaN(v)) commit(used + v);
+    };
+    resetBtn.onclick = async ()=>{
+      const ok = await showConfirm('Reset EL sold for '+(account.name||'this account')+' back to 0?', 'Reset');
+      if(ok) commit(0);
+    };
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
+
+    editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
+
+    wrap.appendChild(head); wrap.appendChild(bar); wrap.appendChild(editRow);
+    return wrap;
+  }
+
   function cardNode(account){
     const card = document.createElement('div');
     card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : '');
@@ -624,6 +724,12 @@
     left.appendChild(name); left.appendChild(meta);
 
     const actions = document.createElement('div'); actions.className='at-cardactions';
+    const upBtn = document.createElement('button'); upBtn.className='at-iconbtn'; upBtn.textContent='↑';
+    upBtn.title = 'Move up';
+    upBtn.onclick = async ()=>{ moveAccount(account.id, -1); await saveAccounts(); renderAll(); };
+    const downBtn = document.createElement('button'); downBtn.className='at-iconbtn'; downBtn.textContent='↓';
+    downBtn.title = 'Move down';
+    downBtn.onclick = async ()=>{ moveAccount(account.id, 1); await saveAccounts(); renderAll(); };
     const editBtn = document.createElement('button'); editBtn.className='at-iconbtn'; editBtn.textContent='✎';
     editBtn.title = 'Edit';
     editBtn.onclick = ()=> openAccountModal(account);
@@ -637,7 +743,7 @@
         renderAll();
       }
     };
-    actions.appendChild(editBtn); actions.appendChild(delBtn);
+    actions.appendChild(upBtn); actions.appendChild(downBtn); actions.appendChild(editBtn); actions.appendChild(delBtn);
 
     head.appendChild(left); head.appendChild(actions);
     card.appendChild(head);
@@ -652,6 +758,10 @@
     trackers.appendChild(trackerNode(account,'relic'));
     trackers.appendChild(trackerNode(account,'ufo'));
     card.appendChild(trackers);
+
+    if(account.server==='EDY2'){
+      card.appendChild(elNode(account));
+    }
 
     return card;
   }
@@ -702,6 +812,7 @@
     renderTabs();
     renderProgress();
     renderGrid();
+    updateHud();
     if(starCanvas){
       requestAnimationFrame(()=>{ sizeStars(); drawStars(); });
     }
@@ -741,6 +852,11 @@
           <option value="Steam 3">Steam 3</option>
           <option value="Steam 4">Steam 4</option>
           <option value="Steam 5">Steam 5</option>
+          <option value="Steam 6">Steam 6</option>
+          <option value="Steam 7">Steam 7</option>
+          <option value="Steam 8">Steam 8</option>
+          <option value="Steam 9">Steam 9</option>
+          <option value="Steam 10">Steam 10</option>
         </select>
         <p class="at-hint">Accounts sharing the same Steam login auto-share RELIC completion (UFO stays per-account).</p>
         <label>Role</label>
@@ -799,7 +915,7 @@
       if(isEdit){
         existing.name=name; existing.role=role; existing.server=server; existing.steamGroup=steamGroup;
       } else {
-        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null});
+        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, el:0});
       }
       await saveAccounts();
       backdrop.remove();
