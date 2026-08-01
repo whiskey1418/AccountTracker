@@ -28,6 +28,9 @@
     --signal-dim:#1B4652;
     --warn:#FFB454;
     --danger:#FF6B6E;
+    --inherit:#C9A6FF;
+    --inherit-soft:rgba(201,166,255,0.14);
+    --inherit-dim:#3B2E52;
     --font-display:'Space Grotesk', 'Segoe UI', sans-serif;
     --font-body:'Inter', 'Segoe UI', sans-serif;
     --font-mono:'IBM Plex Mono', 'Courier New', monospace;
@@ -105,9 +108,9 @@
   .at-tab{
     font-family:var(--font-mono); font-size:12px; letter-spacing:1px;
     padding:9px 16px; border-radius:999px; border:1px solid var(--line);
-    background:var(--surface); color:var(--muted); cursor:pointer; transition:.15s;
+    background:var(--surface); color:var(--muted); cursor:pointer; transition:.18s ease;
   }
-  .at-tab:hover{border-color:var(--accent); color:var(--text);}
+  .at-tab:hover{border-color:var(--accent); color:var(--text); transform:translateY(-1px);}
   .at-tab.active{
     background:var(--accent-soft); color:var(--accent); border-color:var(--accent);
     font-weight:600; box-shadow:0 0 0 1px var(--accent) inset;
@@ -135,10 +138,10 @@
   .at-btn{
     font-family:var(--font-body); font-size:13px; font-weight:600;
     padding:10px 18px; border-radius:9px; border:1px solid var(--line);
-    background:var(--surface2); color:var(--text); cursor:pointer; transition:.15s;
+    background:var(--surface2); color:var(--text); cursor:pointer; transition:.18s ease;
   }
-  .at-btn:hover{border-color:var(--accent); color:var(--accent);}
-  .at-btn.primary{background:var(--accent); color:#06120F; border-color:var(--accent);}
+  .at-btn:hover{border-color:var(--accent); color:var(--accent); transform:translateY(-1px);}
+  .at-btn.primary{background:var(--accent); color:#06120F; border-color:var(--accent); box-shadow:0 10px 24px -14px rgba(111,255,176,0.55);}
   .at-btn.primary:hover{filter:brightness(1.08); color:#06120F;}
   .at-btn.ghost{background:transparent;}
   .at-btn.small{padding:7px 12px; font-size:12px;}
@@ -149,20 +152,29 @@
     background:var(--surface); border:1px solid var(--line); border-radius:14px;
     padding:18px; position:relative; overflow:hidden; transition:border-color .2s, transform .2s;
   }
-  .at-card:hover{border-color:var(--accent-dim); transform:translateY(-2px);}
+  .at-card:hover{border-color:var(--accent-dim); transform:translateY(-2px); box-shadow:0 16px 34px -20px rgba(0,0,0,0.65);}
   .at-card::before{
     content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-dim);
   }
   .at-card.dscp::before{background:var(--signal-dim);}
+  .at-card.inherit::before{background:var(--inherit-dim);}
+  .at-card.inherit:hover{border-color:var(--inherit-dim);}
+  .at-card.inherit .at-meta{color:var(--inherit);}
   .at-card::after{
     content:''; position:absolute; top:10px; right:10px; width:14px; height:14px;
     border-top:1px solid var(--line); border-right:1px solid var(--line); opacity:.7;
   }
   .at-cardhead{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;}
+  .at-cardhead-left{display:flex; align-items:flex-start; gap:10px; min-width:0;}
+  .at-type-icon{
+    font-size:17px; line-height:1; flex-shrink:0; margin-top:1px; width:30px; height:30px;
+    display:flex; align-items:center; justify-content:center; border-radius:9px;
+    background:var(--surface2); border:1px solid var(--line);
+  }
   .at-name{font-family:var(--font-display); font-size:16px; font-weight:600; margin:0 0 4px; letter-spacing:.2px;}
   .at-meta{font-size:11px; color:var(--muted); font-family:var(--font-mono); letter-spacing:.5px;}
   .at-card.dscp .at-meta{color:var(--signal);}
-  .at-card:not(.dscp) .at-meta{color:var(--accent);}
+  .at-card:not(.dscp):not(.inherit) .at-meta{color:var(--accent);}
   .at-badge{
     font-family:var(--font-mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
     padding:4px 9px; border-radius:6px; border:1px solid var(--line); color:var(--muted);
@@ -265,6 +277,7 @@
   .at-progress-count{font-family:var(--font-mono); font-size:12.5px; color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;}
   .at-progress-bar{height:6px; border-radius:999px; background:var(--surface2); overflow:hidden;}
   .at-progress-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .4s;}
+  .at-progress-fill.inherit{background:linear-gradient(90deg, var(--inherit), var(--signal));}
 
   .at-hint{font-size:10.5px; color:var(--muted); margin-top:4px;}
   .at-loading{text-align:center; padding:48px; color:var(--muted); font-family:var(--font-mono); font-size:12px; letter-spacing:1px;}
@@ -368,9 +381,22 @@
   const STORAGE_KEY = 'roster-accounts';
   const SERVERS = [
     {id:'ALL', label:'All'},
-    {id:'EDY2', label:'EDY2'},
-    {id:'DSCPY2', label:'DSCP Y2'}
+    {id:'EDY2', label:'🌱 EDY2'},
+    {id:'DSCPY2', label:'🛰️ DSCP Y2'},
+    {id:'INHERIT', label:'🧬 Inherit'}
   ];
+  function serverIcon(server){
+    if(server==='EDY2') return '🌱';
+    if(server==='DSCPY2') return '🛰️';
+    if(server==='INHERIT') return '🧬';
+    return '•';
+  }
+  function serverLabel(server){
+    if(server==='EDY2') return 'EDY2';
+    if(server==='DSCPY2') return 'DSCP Y2';
+    if(server==='INHERIT') return 'Inherit (DSCP Y2)';
+    return server;
+  }
   let accounts = [];
   let activeTab = 'ALL';
   let tickHandle = null;
@@ -578,7 +604,7 @@
       wrap.appendChild(card);
     }
 
-    const dscpAccounts = filtered.filter(a=>a.server==='DSCPY2');
+    const dscpAccounts = filtered.filter(a=>a.server==='INHERIT');
     if(dscpAccounts.length){
       const totalPoints = dscpAccounts.reduce((sum,a)=> sum + (Math.max(0, Number(a.points)) || 0), 0);
       const totalCap = dscpAccounts.length * POINTS_CAP;
@@ -588,11 +614,11 @@
       card.className = 'at-progress-card';
       card.innerHTML = `
         <div class="at-progress-head">
-          <span class="at-progress-title">Total points · ${dscpAccounts.length} DSCP acct${dscpAccounts.length===1?'':'s'}</span>
+          <span class="at-progress-title">🧬 Total points · ${dscpAccounts.length} Inherit acct${dscpAccounts.length===1?'':'s'}</span>
           <span class="at-progress-count">${totalPoints.toLocaleString()} / ${totalCap.toLocaleString()}</span>
         </div>
-        <div class="at-progress-bar"><div class="at-progress-fill" style="width:${pct}%"></div></div>
-        <p class="at-hint">${remaining.toLocaleString()} points left across all DSCP accounts</p>
+        <div class="at-progress-bar"><div class="at-progress-fill inherit" style="width:${pct}%"></div></div>
+        <p class="at-hint">${remaining.toLocaleString()} points left across all Inherit accounts</p>
       `;
       wrap.appendChild(card);
     }
@@ -880,15 +906,18 @@
 
   function cardNode(account){
     const card = document.createElement('div');
-    card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : '');
+    card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : (account.server==='INHERIT' ? ' inherit' : ''));
 
     const head = document.createElement('div');
     head.className = 'at-cardhead';
-    const left = document.createElement('div');
+    const left = document.createElement('div'); left.className='at-cardhead-left';
+    const typeIcon = document.createElement('span'); typeIcon.className='at-type-icon'; typeIcon.textContent = serverIcon(account.server);
+    const textCol = document.createElement('div');
     const name = document.createElement('p'); name.className='at-name'; name.textContent = account.name || 'Unnamed account';
     const meta = document.createElement('div'); meta.className='at-meta';
-    meta.textContent = (account.server==='EDY2'?'EDY2':'DSCP Y2') + (account.steamGroup ? ' · ' + account.steamGroup : '');
-    left.appendChild(name); left.appendChild(meta);
+    meta.textContent = serverLabel(account.server) + (account.steamGroup ? ' · ' + account.steamGroup : '');
+    textCol.appendChild(name); textCol.appendChild(meta);
+    left.appendChild(typeIcon); left.appendChild(textCol);
 
     const actions = document.createElement('div'); actions.className='at-cardactions';
     const upBtn = document.createElement('button'); upBtn.className='at-iconbtn'; upBtn.textContent='↑';
@@ -924,7 +953,7 @@
     const trackers = document.createElement('div'); trackers.className='at-trackers';
     trackers.appendChild(trackerNode(account,'relic'));
     trackers.appendChild(trackerNode(account,'ufo'));
-    if(account.server==='DSCPY2'){
+    if(account.server==='INHERIT'){
       trackers.appendChild(inheritNode(account));
     }
     card.appendChild(trackers);
@@ -932,7 +961,7 @@
     if(account.server==='EDY2'){
       card.appendChild(elNode(account));
     }
-    if(account.server==='DSCPY2'){
+    if(account.server==='INHERIT'){
       card.appendChild(pointsNode(account));
     }
 
@@ -1001,7 +1030,8 @@
   // ---------- Add / Edit modal ----------
   const ROLES = {
     EDY2: ['Gardener','Chef','Beastmaster'],
-    DSCPY2: ['Chef','Gardener']
+    DSCPY2: ['Chef','Gardener'],
+    INHERIT: ['Chef','Gardener']
   };
 
   function openAccountModal(existing){
@@ -1013,8 +1043,9 @@
         <h3>${isEdit ? 'Edit account' : 'Add account'}</h3>
         <label>Server</label>
         <select class="at-select" id="mServer">
-          <option value="EDY2">EDY2</option>
-          <option value="DSCPY2">DSCP Y2</option>
+          <option value="EDY2">🌱 EDY2</option>
+          <option value="DSCPY2">🛰️ DSCP Y2</option>
+          <option value="INHERIT">🧬 Inherit (DSCP Y2)</option>
         </select>
         <label>Account name</label>
         <input class="at-input" id="mName" placeholder="e.g. Main, Alt 1..." />
@@ -1057,6 +1088,8 @@
       roleSel.value = (preferredRole && options.includes(preferredRole)) ? preferredRole : options[0];
       roleHint.textContent = serverValue==='EDY2'
         ? 'Beastmaster is only available on EDY2.'
+        : serverValue==='INHERIT'
+        ? 'Chef and Gardener are available. Inherit accounts track points and the 7-day Inherit Deviant cooldown separately from regular DSCP Y2.'
         : 'Chef and Gardener are available on DSCP Y2.';
     }
 
