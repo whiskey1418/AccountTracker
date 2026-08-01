@@ -448,10 +448,25 @@
   }
 
   // ---------- Storage (plain localStorage — this runs as a standalone site now, not a Claude artifact) ----------
+  const STEAM_GROUP_MIGRATIONS = {
+    'Steam 1': 'Steam 1 - artemis14180',
+    'Steam 2': 'Steam 2 - artemis1418',
+    'Steam 3': 'Steam 3 - whiskey141800',
+    'Steam 4': 'Steam 4 - zsammy18',
+    'Steam 5': 'Steam 5 - zsammypaypal'
+  };
   async function loadData(){
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
       accounts = raw ? JSON.parse(raw) : [];
+      let migrated = false;
+      accounts.forEach(a=>{
+        if(a.steamGroup && STEAM_GROUP_MIGRATIONS[a.steamGroup]){
+          a.steamGroup = STEAM_GROUP_MIGRATIONS[a.steamGroup];
+          migrated = true;
+        }
+      });
+      if(migrated) await saveAccounts();
     }catch(e){ accounts = []; }
   }
   let pendingSaveRetry = null;
