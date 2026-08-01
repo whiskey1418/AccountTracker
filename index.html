@@ -539,6 +539,25 @@
       `;
       wrap.appendChild(card);
     });
+
+    const edyAccounts = filtered.filter(a=>a.server==='EDY2');
+    if(edyAccounts.length){
+      const totalSold = edyAccounts.reduce((sum,a)=> sum + (Math.max(0, Number(a.el)) || 0), 0);
+      const totalCap = edyAccounts.length * EL_CAP;
+      const remaining = Math.max(0, totalCap - totalSold);
+      const pct = totalCap ? Math.round((totalSold/totalCap)*100) : 0;
+      const card = document.createElement('div');
+      card.className = 'at-progress-card';
+      card.innerHTML = `
+        <div class="at-progress-head">
+          <span class="at-progress-title">Total EL · ${edyAccounts.length} EDY2 acct${edyAccounts.length===1?'':'s'}</span>
+          <span class="at-progress-count">${totalSold.toLocaleString()} / ${totalCap.toLocaleString()}</span>
+        </div>
+        <div class="at-progress-bar"><div class="at-progress-fill" style="width:${pct}%"></div></div>
+        <p class="at-hint">${remaining.toLocaleString()} EL left if you max out every account</p>
+      `;
+      wrap.appendChild(card);
+    }
   }
 
   function updateHud(){
