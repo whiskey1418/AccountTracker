@@ -310,6 +310,21 @@
 
   .at-hint{font-size:10.5px; color:var(--muted); margin-top:4px;}
   .at-loading{text-align:center; padding:48px; color:var(--muted); font-family:var(--font-mono); font-size:12px; letter-spacing:1px;}
+
+  /* ---- UFO progress note ---- */
+  .at-ufonote{
+    margin:-2px 0 2px; padding:8px 10px 9px; border:1px dashed var(--line); border-radius:9px;
+    background:var(--surface2); display:flex; flex-direction:column; gap:6px;
+  }
+  .at-ufonote-current{font-size:11px; color:var(--signal); display:flex; align-items:flex-start; gap:6px; line-height:1.4;}
+  .at-ufonote-current.empty{color:var(--muted); font-style:italic;}
+  .at-ufonote-current .at-ufonote-pin{flex-shrink:0;}
+  .at-ufonote-editrow{display:flex; gap:6px;}
+  .at-ufonote-input{
+    flex:1; min-width:0; background:var(--surface); border:1px solid var(--line); border-radius:7px;
+    color:var(--text); font-family:var(--font-body); font-size:12px; padding:6px 9px;
+  }
+  .at-ufonote-input:focus{outline:none; border-color:var(--signal);}
   .at-save-error{
     display:none; align-items:center; justify-content:space-between; gap:12px;
     background:rgba(255,107,110,0.08); border:1px solid rgba(255,107,110,0.35); color:var(--danger);
@@ -443,6 +458,9 @@
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
 
   function uid(){ return 'acc_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
 
   // Native window.confirm() is blocked inside this sandboxed artifact frame,
   // so we use our own in-app confirmation dialog instead.
@@ -758,6 +776,11 @@
     check.onclick = async ()=>{
       const newVal = isDone ? null : Date.now();
       account[doneField] = newVal;
+      // Marking the weekly UFO done clears its progress note too, so a
+      // stale "up to boss 3" note doesn't carry into next week's run.
+      if(!isDaily && newVal){
+        account.ufoNote = '';
+      }
       // RELIC is shared per Steam login: toggling it on one account toggles it
       // on every other account under the same Steam login too. UFO is per-account,
       // so it's never propagated.
@@ -782,6 +805,56 @@
       const nx2 = nextReset(mr2, isDaily?1:7);
       timer.textContent = 'resets in ' + fmtCountdown(nx2-s2);
     };
+
+    if(!isDaily){
+      // UFO progress note: a free-text spot to jot where you left off
+      // (e.g. "up to boss 3", "cleared floor 2") so it's obvious what
+      // to click/continue if you lose track mid-run.
+      const wrap = document.createElement('div');
+      wrap.appendChild(row);
+
+      const noteBox = document.createElement('div');
+      noteBox.className = 'at-ufonote';
+
+      const current = document.createElement('div');
+      const refreshCurrent = ()=>{
+        const val = (account.ufoNote||'').trim();
+        current.className = 'at-ufonote-current' + (val ? '' : ' empty');
+        current.innerHTML = '<span class="at-ufonote-pin">📍</span><span>'
+          + (val ? escapeHtml(val) : 'No progress note yet — jot where you left off (e.g. "up to boss 3") so you know where to pick up.')
+          + '</span>';
+      };
+      refreshCurrent();
+
+      const editRow = document.createElement('div');
+      editRow.className = 'at-ufonote-editrow';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'at-ufonote-input';
+      input.placeholder = 'Progress note, e.g. "up to boss 3"';
+      input.value = account.ufoNote || '';
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'at-btn small';
+      saveBtn.textContent = 'Save';
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'at-btn small ghost';
+      clearBtn.textContent = 'Clear';
+
+      async function commitNote(val){
+        account.ufoNote = val;
+        refreshCurrent();
+        await saveAccounts();
+      }
+      saveBtn.onclick = ()=> commitNote(input.value.trim());
+      clearBtn.onclick = ()=>{ input.value=''; commitNote(''); };
+      input.addEventListener('keydown', e=>{ if(e.key==='Enter') saveBtn.click(); });
+
+      editRow.appendChild(input); editRow.appendChild(saveBtn); editRow.appendChild(clearBtn);
+      noteBox.appendChild(current); noteBox.appendChild(editRow);
+      wrap.appendChild(noteBox);
+      return wrap;
+    }
+
     return row;
   }
 
@@ -1177,7 +1250,7 @@
       if(isEdit){
         existing.name=name; existing.role=role; existing.server=server; existing.steamGroup=steamGroup;
       } else {
-        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, el:0, points:0, inheritDone:null});
+        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, ufoNote:'', el:0, points:0, inheritDone:null});
       }
       await saveAccounts();
       backdrop.remove();
