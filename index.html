@@ -363,7 +363,7 @@
         <span class="at-status-pill">Live tracking</span>
         <p class="at-eyebrow">// account control</p>
         <h1 class="at-title">Zsammy Tracker</h1>
-        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (weekly, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
+        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
       </div>
       <div class="at-radar"></div>
     </div>
@@ -483,11 +483,11 @@
     return d;
   }
   function mostRecentWeeklyReset(shiftedNow){
-    // Wednesday = 3
+    // Monday = 1 (UFO resets every Monday)
     const d = new Date(shiftedNow);
     d.setUTCHours(6,0,0,0);
     const day = d.getUTCDay();
-    const diff = (day - 3 + 7) % 7;
+    const diff = (day - 1 + 7) % 7;
     d.setUTCDate(d.getUTCDate() - diff);
     if(d > shiftedNow) d.setUTCDate(d.getUTCDate()-7);
     return d;
