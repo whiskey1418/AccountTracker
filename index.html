@@ -141,6 +141,8 @@
 
   /* ---- Buttons ---- */
   .at-addbar{display:flex; align-items:center; justify-content:flex-end; margin-bottom:16px; gap:10px;}
+  .at-search{flex:0 1 220px;}
+  @media (max-width:560px){ .at-search{flex:1 1 100%; order:1;} }
   .at-savestatus{
     font-family:var(--font-mono); font-size:11px; color:var(--muted); margin-right:auto;
     letter-spacing:.3px; display:flex; align-items:center; gap:6px;
@@ -253,6 +255,9 @@
   .at-el-label{font-size:12.5px; font-weight:600;}
   .at-el-amount{font-family:var(--font-mono); font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .at-el-amount.full{color:var(--warn);}
+  .at-el-timer{font-family:var(--font-mono); font-size:10px; color:var(--muted); margin:-3px 0 9px; letter-spacing:.3px;}
+  .at-el.urgent{border-color:rgba(255,180,84,0.4);}
+  .at-el.urgent .at-el-timer{color:var(--warn);}
   .at-el-bar{height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-bottom:9px;}
   .at-el-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .3s;}
   .at-el-fill.full{background:linear-gradient(90deg, var(--warn), var(--danger));}
@@ -272,11 +277,17 @@
   /* ---- Steam group sections ---- */
   .at-group{margin-bottom:22px;}
   .at-group-head{
-    display:flex; align-items:center; gap:10px; margin-bottom:12px;
+    display:flex; align-items:center; gap:10px; margin-bottom:12px; cursor:pointer; user-select:none;
     font-family:var(--font-mono); font-size:11.5px; letter-spacing:2px; text-transform:uppercase; color:var(--signal);
   }
+  .at-group-head:hover{color:var(--accent);}
   .at-group-head::after{content:''; flex:1; height:1px; background:var(--line);}
   .at-group-count{color:var(--muted); letter-spacing:.5px; text-transform:none;}
+  .at-group-chevron{
+    display:inline-block; font-size:10px; color:var(--muted); transition:transform .18s ease;
+    transform:rotate(0deg);
+  }
+  .at-group-head.collapsed .at-group-chevron{transform:rotate(-90deg);}
 
   /* ---- Modal ---- */
   .at-modal-backdrop{
@@ -375,7 +386,7 @@
         <span class="at-status-pill">Live tracking</span>
         <p class="at-eyebrow">// account control</p>
         <h1 class="at-title">Zsammy Tracker</h1>
-        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
+        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), EL sold (every Wednesday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
       </div>
       <div class="at-radar"></div>
     </div>
@@ -389,8 +400,12 @@
         <span class="at-hud-value" id="hudDaily">--</span>
       </div>
       <div class="at-hud-chip" id="hudWeeklyChip">
-        <span class="at-hud-label">Weekly reset in</span>
+        <span class="at-hud-label">UFO reset in</span>
         <span class="at-hud-value" id="hudWeekly">--</span>
+      </div>
+      <div class="at-hud-chip" id="hudElChip">
+        <span class="at-hud-label">EL reset in</span>
+        <span class="at-hud-value" id="hudEl">--</span>
       </div>
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
@@ -411,6 +426,7 @@
     <div class="at-progress-row" id="atProgress"></div>
     <div class="at-addbar">
       <span class="at-savestatus" id="atSaveStatus">All changes saved</span>
+      <input class="at-input at-search" id="atSearch" placeholder="Search accounts..." autocomplete="off" />
       <button class="at-btn primary" id="atAddBtn">+ Add account</button>
     </div>
     <div class="at-grid" id="atGrid"></div>
@@ -453,6 +469,34 @@
   const EL_CAP = 500000; // EDY2 sell limit per account
   const POINTS_CAP = 20000; // DSCP points cap per account
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
+  const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
+  let searchQuery = '';
+  let collapsedGroups = new Set();
+
+  function elNextResetShifted(shiftedNow){
+    const mr = mostRecentWeeklyResetForDay(shiftedNow, EL_RESET_DAY);
+    return nextReset(mr, 7);
+  }
+
+  // Rolls each EDY2 account's EL sold back to 0 the first time we notice we've
+  // crossed a Wednesday reset boundary since its last known reset. Uses a
+  // stored marker (elResetAt) rather than a live timer so it still catches up
+  // correctly even if the app was closed across one or more Wednesdays.
+  function checkElAutoResets(){
+    const shiftedNow = nowShifted();
+    const mrWedReal = shiftedToRealEpoch(mostRecentWeeklyResetForDay(shiftedNow, EL_RESET_DAY));
+    let changed = false;
+    accounts.forEach(a=>{
+      if(a.server !== 'EDY2') return;
+      const lastReset = a.elResetAt || 0;
+      if(lastReset < mrWedReal){
+        if((Number(a.el)||0) !== 0){ a.el = 0; }
+        a.elResetAt = mrWedReal;
+        changed = true;
+      }
+    });
+    return changed;
+  }
 
   function uid(){ return 'acc_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
   function escapeHtml(str){
@@ -497,15 +541,19 @@
     if(d > shiftedNow) d.setUTCDate(d.getUTCDate()-1);
     return d;
   }
-  function mostRecentWeeklyReset(shiftedNow){
-    // Monday = 1 (UFO resets every Monday)
+  function mostRecentWeeklyResetForDay(shiftedNow, targetDay){
+    // targetDay: 0=Sun, 1=Mon, 2=Tue, 3=Wed, ...
     const d = new Date(shiftedNow);
     d.setUTCHours(6,0,0,0);
     const day = d.getUTCDay();
-    const diff = (day - 1 + 7) % 7;
+    const diff = (day - targetDay + 7) % 7;
     d.setUTCDate(d.getUTCDate() - diff);
     if(d > shiftedNow) d.setUTCDate(d.getUTCDate()-7);
     return d;
+  }
+  function mostRecentWeeklyReset(shiftedNow){
+    // Monday = 1 (UFO resets every Monday)
+    return mostRecentWeeklyResetForDay(shiftedNow, 1);
   }
   function nextReset(mostRecentShifted, days){
     const d = new Date(mostRecentShifted);
@@ -550,6 +598,7 @@
         }
       });
       if(migrated) await saveAccounts();
+      if(checkElAutoResets()) await saveAccounts();
     }catch(e){ accounts = []; }
   }
   let pendingSaveRetry = null;
@@ -699,6 +748,13 @@
     const weeklyChip = document.getElementById('hudWeeklyChip');
     if(weeklyChip) weeklyChip.classList.toggle('urgent', weeklyMs < 3600000);
 
+    const elNext = elNextResetShifted(shiftedNow);
+    const elMs = elNext - shiftedNow;
+    const elEl = document.getElementById('hudEl');
+    if(elEl) elEl.textContent = fmtCountdown(elMs);
+    const elChip = document.getElementById('hudElChip');
+    if(elChip) elChip.classList.toggle('urgent', elMs < 3600000);
+
     const totalEl = document.getElementById('hudTotal');
     if(totalEl) totalEl.textContent = accounts.length;
     const breakdownEl = document.getElementById('hudBreakdown');
@@ -842,6 +898,16 @@
     amount.textContent = used.toLocaleString() + ' / ' + EL_CAP.toLocaleString() + (isFull?' · LIMIT':'');
     head.appendChild(label); head.appendChild(amount);
 
+    const timer = document.createElement('div'); timer.className='at-el-timer';
+    function updateElTimer(){
+      const shiftedNow = nowShifted();
+      const ms = elNextResetShifted(shiftedNow) - shiftedNow;
+      timer.textContent = 'resets Wed · ' + fmtCountdown(ms);
+      wrap.classList.toggle('urgent', ms < 3600000);
+    }
+    updateElTimer();
+    wrap._recalc = updateElTimer;
+
     const bar = document.createElement('div'); bar.className='at-el-bar';
     const fill = document.createElement('div'); fill.className='at-el-fill'+(isFull?' full':'');
     fill.style.width = pct+'%';
@@ -882,7 +948,7 @@
 
     editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
 
-    wrap.appendChild(head); wrap.appendChild(bar); wrap.appendChild(editRow);
+    wrap.appendChild(head); wrap.appendChild(timer); wrap.appendChild(bar); wrap.appendChild(editRow);
     return wrap;
   }
 
@@ -1068,12 +1134,22 @@
     const grid = document.getElementById('atGrid');
     grid.innerHTML = '';
     grid.classList.remove('at-grid');
-    const filtered = activeTab==='ALL' ? accounts : accounts.filter(a=>a.server===activeTab);
+    let filtered = activeTab==='ALL' ? accounts : accounts.filter(a=>a.server===activeTab);
+    if(searchQuery){
+      filtered = filtered.filter(a=>{
+        const name = (a.name||'').toLowerCase();
+        const steam = (a.steamGroup||'').toLowerCase();
+        const role = (a.role||'').toLowerCase();
+        return name.includes(searchQuery) || steam.includes(searchQuery) || role.includes(searchQuery);
+      });
+    }
     if(filtered.length===0){
       grid.classList.add('at-grid');
       const empty = document.createElement('div');
       empty.className = 'at-empty';
-      empty.textContent = 'No accounts here yet. Add one to start tracking resets.';
+      empty.textContent = searchQuery
+        ? 'No accounts match "' + searchQuery + '".'
+        : 'No accounts here yet. Add one to start tracking resets.';
       grid.appendChild(empty);
       return;
     }
@@ -1092,13 +1168,19 @@
 
     sortedKeys.forEach(key=>{
       const list = groups.get(key);
+      const isCollapsed = collapsedGroups.has(key);
       const section = document.createElement('div');
       section.className = 'at-group';
       const headEl = document.createElement('div');
-      headEl.className = 'at-group-head';
-      headEl.innerHTML = `<span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>`;
+      headEl.className = 'at-group-head' + (isCollapsed ? ' collapsed' : '');
+      headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>`;
+      headEl.onclick = ()=>{
+        if(collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
+        renderGrid();
+      };
       const innerGrid = document.createElement('div');
       innerGrid.className = 'at-grid';
+      if(isCollapsed) innerGrid.style.display = 'none';
       list.forEach(a=> innerGrid.appendChild(cardNode(a)));
       section.appendChild(headEl);
       section.appendChild(innerGrid);
@@ -1121,6 +1203,15 @@
     document.querySelectorAll('.at-tracker').forEach(node=>{
       if(node._recalc) node._recalc();
     });
+    document.querySelectorAll('.at-el').forEach(node=>{
+      if(node._recalc) node._recalc();
+    });
+    // Catches the Wednesday EL reset firing live if the app is left open
+    // across the boundary, instead of only checking on load.
+    if(checkElAutoResets()){
+      saveAccounts();
+      renderAll();
+    }
   }
 
   // ---------- Add / Edit modal ----------
@@ -1302,6 +1393,13 @@
     document.getElementById('atApp').style.display='block';
     document.getElementById('atAddBtn').onclick = ()=> openAccountModal(null);
     document.getElementById('atRetrySave').onclick = ()=> saveAccounts();
+    const searchInput = document.getElementById('atSearch');
+    if(searchInput){
+      searchInput.addEventListener('input', ()=>{
+        searchQuery = searchInput.value.trim().toLowerCase();
+        renderGrid();
+      });
+    }
     renderAll();
     updateHud();
     setSaveStatus('saved');
