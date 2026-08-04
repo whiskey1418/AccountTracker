@@ -592,7 +592,7 @@
   // as aligned to the PH clock's :00 and :30 marks. Nudge GRAVITY_ANCHOR_OFFSET_MIN
   // (0-29) if you find it's consistently off from what you see in-game.
   const GRAVITY_CYCLE_MIN = 30;
-  const GRAVITY_ANCHOR_OFFSET_MIN = 0;
+  const GRAVITY_ANCHOR_OFFSET_MIN = 22;
   function nextGravityShifted(shiftedNow){
     const dayStart = new Date(shiftedNow);
     dayStart.setUTCHours(0,0,0,0);
