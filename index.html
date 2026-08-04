@@ -162,22 +162,24 @@
   @keyframes pulse-dot{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
   .at-btn{
     font-family:var(--font-body); font-size:13px; font-weight:600;
-    padding:10px 18px; border-radius:9px; border:1px solid var(--line);
+    padding:10px 18px; border-radius:10px; border:1px solid var(--line);
     background:var(--surface2); color:var(--text); cursor:pointer; transition:.18s ease;
   }
   .at-btn:hover{border-color:var(--accent); color:var(--accent); transform:translateY(-1px);}
-  .at-btn.primary{background:var(--accent); color:#06120F; border-color:var(--accent); box-shadow:0 10px 24px -14px rgba(111,255,176,0.55);}
-  .at-btn.primary:hover{filter:brightness(1.08); color:#06120F;}
+  .at-btn:active{transform:translateY(0);}
+  .at-btn.primary{background:var(--accent); color:#06120F; border-color:var(--accent); box-shadow:0 10px 24px -14px rgba(111,255,176,0.55); font-weight:700;}
+  .at-btn.primary:hover{filter:brightness(1.08); color:#06120F; box-shadow:0 12px 28px -12px rgba(111,255,176,0.65);}
   .at-btn.ghost{background:transparent;}
   .at-btn.small{padding:7px 12px; font-size:12px;}
 
   /* ---- Account cards ---- */
-  .at-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px;}
+  .at-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:18px;}
   .at-card{
-    background:var(--surface); border:1px solid var(--line); border-radius:14px;
-    padding:18px; position:relative; overflow:hidden; transition:border-color .2s, transform .2s;
+    background:linear-gradient(165deg, rgba(255,255,255,0.02), transparent 40%), var(--surface);
+    border:1px solid var(--line); border-radius:16px;
+    padding:19px; position:relative; overflow:hidden; transition:border-color .2s ease, transform .2s ease, box-shadow .2s ease;
   }
-  .at-card:hover{border-color:var(--accent-dim); transform:translateY(-2px); box-shadow:0 16px 34px -20px rgba(0,0,0,0.65);}
+  .at-card:hover{border-color:var(--accent-dim); transform:translateY(-3px); box-shadow:0 20px 40px -20px rgba(0,0,0,0.7), 0 0 0 1px var(--accent-dim);}
   .at-card::before{
     content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-dim);
   }
@@ -258,10 +260,30 @@
   .at-el-timer{font-family:var(--font-mono); font-size:10px; color:var(--muted); margin:-3px 0 9px; letter-spacing:.3px;}
   .at-el.urgent{border-color:rgba(255,180,84,0.4);}
   .at-el.urgent .at-el-timer{color:var(--warn);}
-  .at-el-bar{height:6px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-bottom:9px;}
-  .at-el-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .3s;}
-  .at-el-fill.full{background:linear-gradient(90deg, var(--warn), var(--danger));}
-  .at-el-editrow{display:flex; gap:6px; align-items:center;}
+  .at-el-bar{height:7px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-bottom:10px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.3);}
+  .at-el-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .35s ease; box-shadow:0 0 10px -2px var(--accent);}
+  .at-el-fill.full{background:linear-gradient(90deg, var(--warn), var(--danger)); box-shadow:0 0 10px -2px var(--danger);}
+  .at-el-quickrow{display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;}
+  .at-quick-chip{
+    flex:1 1 0; min-width:44px; font-family:var(--font-mono); font-size:11.5px; font-weight:700;
+    padding:8px 6px; border-radius:8px; border:1px solid var(--line); background:var(--surface);
+    color:var(--text); cursor:pointer; transition:.15s ease; letter-spacing:.3px; text-align:center;
+  }
+  .at-quick-chip:hover{border-color:var(--signal); color:var(--signal); transform:translateY(-1px);}
+  .at-quick-chip:active{transform:translateY(0); filter:brightness(0.92);}
+  .at-quick-chip.max{color:var(--warn); border-color:rgba(255,180,84,0.3);}
+  .at-quick-chip.max:hover{border-color:var(--warn); color:var(--warn);}
+  .at-quick-chip:disabled{opacity:.35; cursor:not-allowed; transform:none;}
+  .at-el-manual{display:flex; align-items:center; justify-content:space-between; cursor:pointer; margin-bottom:6px;}
+  .at-el-manual-label{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
+    display:flex; align-items:center; gap:4px; user-select:none;
+  }
+  .at-el-manual-label:hover{color:var(--text);}
+  .at-el-manual-chevron{display:inline-block; font-size:8px; transition:transform .18s ease;}
+  .at-el-manual-chevron.open{transform:rotate(90deg);}
+  .at-el-editrow{display:flex; gap:6px; align-items:center; overflow:hidden; max-height:0; opacity:0; transition:max-height .2s ease, opacity .2s ease, margin .2s ease;}
+  .at-el-editrow.open{max-height:60px; opacity:1; margin-top:6px;}
   .at-el-input{
     flex:1; min-width:0; background:var(--surface); border:1px solid var(--line); color:var(--text);
     border-radius:7px; padding:6px 8px; font-size:12px; font-family:var(--font-mono);
@@ -913,6 +935,33 @@
     fill.style.width = pct+'%';
     bar.appendChild(fill);
 
+    async function commit(newVal){
+      account.el = Math.max(0, Math.min(EL_CAP, newVal));
+      await saveAccounts();
+      renderAll();
+    }
+
+    // Quick-add chips — one tap to add 10k/50k/100k, or jump straight to the 500k cap.
+    const quickRow = document.createElement('div'); quickRow.className='at-el-quickrow';
+    [ {label:'+10k', amt:10000}, {label:'+50k', amt:50000}, {label:'+100k', amt:100000} ].forEach(q=>{
+      const chip = document.createElement('button');
+      chip.className = 'at-quick-chip'; chip.type='button'; chip.textContent = q.label;
+      chip.title = 'Add '+q.amt.toLocaleString()+' EL to the running total';
+      chip.disabled = isFull;
+      chip.onclick = ()=> commit(used + q.amt);
+      quickRow.appendChild(chip);
+    });
+    const maxChip = document.createElement('button');
+    maxChip.className = 'at-quick-chip max'; maxChip.type='button'; maxChip.textContent = 'Max';
+    maxChip.title = 'Set EL sold straight to the '+EL_CAP.toLocaleString()+' cap';
+    maxChip.disabled = isFull;
+    maxChip.onclick = ()=> commit(EL_CAP);
+    quickRow.appendChild(maxChip);
+
+    // Manual entry stays available (collapsed) for exact/typed amounts or corrections.
+    const manualToggle = document.createElement('div'); manualToggle.className='at-el-manual';
+    manualToggle.innerHTML = '<span class="at-el-manual-label"><span class="at-el-manual-chevron">▸</span>Type exact amount</span>';
+
     const editRow = document.createElement('div'); editRow.className='at-el-editrow';
     const input = document.createElement('input');
     input.type='number'; input.className='at-el-input'; input.placeholder='Amount sold';
@@ -927,11 +976,6 @@
     resetBtn.className='at-btn small ghost'; resetBtn.textContent='Reset';
     resetBtn.title = 'Reset EL sold back to 0';
 
-    async function commit(newVal){
-      account.el = Math.max(0, newVal);
-      await saveAccounts();
-      renderAll();
-    }
     setBtn.onclick = ()=>{
       const v = parseFloat(input.value);
       if(!isNaN(v)) commit(v);
@@ -946,9 +990,16 @@
     };
     input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
 
+    manualToggle.onclick = ()=>{
+      editRow.classList.toggle('open');
+      manualToggle.querySelector('.at-el-manual-chevron').classList.toggle('open');
+      if(editRow.classList.contains('open')) input.focus();
+    };
+
     editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
 
-    wrap.appendChild(head); wrap.appendChild(timer); wrap.appendChild(bar); wrap.appendChild(editRow);
+    wrap.appendChild(head); wrap.appendChild(timer); wrap.appendChild(bar);
+    wrap.appendChild(quickRow); wrap.appendChild(manualToggle); wrap.appendChild(editRow);
     return wrap;
   }
 
@@ -971,6 +1022,31 @@
     fill.style.width = pct+'%';
     bar.appendChild(fill);
 
+    async function commit(newVal){
+      account.points = Math.max(0, Math.min(POINTS_CAP, newVal));
+      await saveAccounts();
+      renderAll();
+    }
+
+    const quickRow = document.createElement('div'); quickRow.className='at-el-quickrow';
+    [ {label:'+1k', amt:1000}, {label:'+5k', amt:5000}, {label:'+10k', amt:10000} ].forEach(q=>{
+      const chip = document.createElement('button');
+      chip.className = 'at-quick-chip'; chip.type='button'; chip.textContent = q.label;
+      chip.title = 'Add '+q.amt.toLocaleString()+' points to the running total';
+      chip.disabled = isFull;
+      chip.onclick = ()=> commit(used + q.amt);
+      quickRow.appendChild(chip);
+    });
+    const maxChip = document.createElement('button');
+    maxChip.className = 'at-quick-chip max'; maxChip.type='button'; maxChip.textContent = 'Max';
+    maxChip.title = 'Set points straight to the '+POINTS_CAP.toLocaleString()+' cap';
+    maxChip.disabled = isFull;
+    maxChip.onclick = ()=> commit(POINTS_CAP);
+    quickRow.appendChild(maxChip);
+
+    const manualToggle = document.createElement('div'); manualToggle.className='at-el-manual';
+    manualToggle.innerHTML = '<span class="at-el-manual-label"><span class="at-el-manual-chevron">▸</span>Type exact amount</span>';
+
     const editRow = document.createElement('div'); editRow.className='at-el-editrow';
     const input = document.createElement('input');
     input.type='number'; input.className='at-el-input'; input.placeholder='Points';
@@ -985,11 +1061,6 @@
     resetBtn.className='at-btn small ghost'; resetBtn.textContent='Reset';
     resetBtn.title = 'Reset points back to 0';
 
-    async function commit(newVal){
-      account.points = Math.max(0, newVal);
-      await saveAccounts();
-      renderAll();
-    }
     setBtn.onclick = ()=>{
       const v = parseFloat(input.value);
       if(!isNaN(v)) commit(v);
@@ -1004,9 +1075,16 @@
     };
     input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
 
+    manualToggle.onclick = ()=>{
+      editRow.classList.toggle('open');
+      manualToggle.querySelector('.at-el-manual-chevron').classList.toggle('open');
+      if(editRow.classList.contains('open')) input.focus();
+    };
+
     editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
 
-    wrap.appendChild(head); wrap.appendChild(bar); wrap.appendChild(editRow);
+    wrap.appendChild(head); wrap.appendChild(bar);
+    wrap.appendChild(quickRow); wrap.appendChild(manualToggle); wrap.appendChild(editRow);
     return wrap;
   }
 
