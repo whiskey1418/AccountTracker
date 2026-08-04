@@ -429,6 +429,11 @@
         <span class="at-hud-label">EL reset in</span>
         <span class="at-hud-value" id="hudEl">--</span>
       </div>
+      <div class="at-hud-chip" id="hudGravityChip">
+        <span class="at-hud-label">Gravity cooldown</span>
+        <span class="at-hud-value" id="hudGravity">--</span>
+        <span class="at-hud-breakdown">Starfall · ~30min cycle, est.</span>
+      </div>
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
         <span class="at-hud-value" id="hudTotal">0</span>
@@ -581,6 +586,22 @@
     const d = new Date(mostRecentShifted);
     d.setUTCDate(d.getUTCDate()+days);
     return d;
+  }
+  // Gravity Abyss (Starfall event) — repeating ~30min low-gravity cycle.
+  // No official server anchor is published, so this approximates the cycle
+  // as aligned to the PH clock's :00 and :30 marks. Nudge GRAVITY_ANCHOR_OFFSET_MIN
+  // (0-29) if you find it's consistently off from what you see in-game.
+  const GRAVITY_CYCLE_MIN = 30;
+  const GRAVITY_ANCHOR_OFFSET_MIN = 0;
+  function nextGravityShifted(shiftedNow){
+    const dayStart = new Date(shiftedNow);
+    dayStart.setUTCHours(0,0,0,0);
+    const cycleMs = GRAVITY_CYCLE_MIN*60*1000;
+    const offsetMs = GRAVITY_ANCHOR_OFFSET_MIN*60*1000;
+    const sinceAnchor = (shiftedNow - dayStart) - offsetMs;
+    const msIntoCycle = ((sinceAnchor % cycleMs) + cycleMs) % cycleMs;
+    const msUntilNext = cycleMs - msIntoCycle;
+    return new Date(shiftedNow.getTime() + msUntilNext);
   }
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
@@ -776,6 +797,13 @@
     if(elEl) elEl.textContent = fmtCountdown(elMs);
     const elChip = document.getElementById('hudElChip');
     if(elChip) elChip.classList.toggle('urgent', elMs < 3600000);
+
+    const gravityNext = nextGravityShifted(shiftedNow);
+    const gravityMs = gravityNext - shiftedNow;
+    const gravityEl = document.getElementById('hudGravity');
+    if(gravityEl) gravityEl.textContent = fmtCountdown(gravityMs);
+    const gravityChip = document.getElementById('hudGravityChip');
+    if(gravityChip) gravityChip.classList.toggle('urgent', gravityMs < 300000);
 
     const totalEl = document.getElementById('hudTotal');
     if(totalEl) totalEl.textContent = accounts.length;
