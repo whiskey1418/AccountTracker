@@ -589,15 +589,15 @@
   }
   // Gravity Abyss (Starfall event) — repeating ~30min low-gravity cycle.
   // No official server anchor is published, so this approximates the cycle
-  // as aligned to the PH clock's :00 and :30 marks. Nudge GRAVITY_ANCHOR_OFFSET_MIN
-  // (0-29) if you find it's consistently off from what you see in-game.
+  // as aligned to the PH clock's :22:27 and :52:27 marks. Nudge GRAVITY_ANCHOR_OFFSET_SEC
+  // (0 - GRAVITY_CYCLE_MIN*60-1) if you find it's drifted from what you see in-game.
   const GRAVITY_CYCLE_MIN = 30;
-  const GRAVITY_ANCHOR_OFFSET_MIN = 22;
+  const GRAVITY_ANCHOR_OFFSET_SEC = 22*60 + 27; // 22:27 past each half-hour boundary
   function nextGravityShifted(shiftedNow){
     const dayStart = new Date(shiftedNow);
     dayStart.setUTCHours(0,0,0,0);
     const cycleMs = GRAVITY_CYCLE_MIN*60*1000;
-    const offsetMs = GRAVITY_ANCHOR_OFFSET_MIN*60*1000;
+    const offsetMs = GRAVITY_ANCHOR_OFFSET_SEC*1000;
     const sinceAnchor = (shiftedNow - dayStart) - offsetMs;
     const msIntoCycle = ((sinceAnchor % cycleMs) + cycleMs) % cycleMs;
     const msUntilNext = cycleMs - msIntoCycle;
