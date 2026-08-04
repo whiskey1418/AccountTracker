@@ -125,6 +125,9 @@
   .at-hud-chip .at-hud-breakdown{font-size:10px; color:var(--muted); letter-spacing:.3px;}
   .at-hud-chip.urgent{border-color:rgba(255,180,84,0.4);}
   .at-hud-chip.urgent .at-hud-value{color:var(--warn);}
+  .at-hud-chip.active{border-color:var(--accent-dim); background:var(--accent-soft);}
+  .at-hud-chip.active .at-hud-value{color:var(--accent);}
+  .at-hud-chip.active .at-hud-label{color:var(--accent);}
 
   /* ---- Tabs ---- */
   .at-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
@@ -430,9 +433,9 @@
         <span class="at-hud-value" id="hudEl">--</span>
       </div>
       <div class="at-hud-chip" id="hudGravityChip">
-        <span class="at-hud-label">Gravity cooldown</span>
+        <span class="at-hud-label" id="hudGravityLabel">Gravity · time to start</span>
         <span class="at-hud-value" id="hudGravity">--</span>
-        <span class="at-hud-breakdown">Starfall · ~30min cycle, est.</span>
+        <span class="at-hud-breakdown">Starfall · ~30min phases, est.</span>
       </div>
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
@@ -587,21 +590,28 @@
     d.setUTCDate(d.getUTCDate()+days);
     return d;
   }
-  // Gravity Abyss (Starfall event) — repeating ~30min low-gravity cycle.
-  // No official server anchor is published, so this approximates the cycle
-  // as aligned to the PH clock's :22:27 and :52:27 marks. Nudge GRAVITY_ANCHOR_OFFSET_SEC
-  // (0 - GRAVITY_CYCLE_MIN*60-1) if you find it's drifted from what you see in-game.
-  const GRAVITY_CYCLE_MIN = 30;
-  const GRAVITY_ANCHOR_OFFSET_SEC = 22*60 + 27; // 22:27 past each half-hour boundary
-  function nextGravityShifted(shiftedNow){
+  // Gravity Abyss (Starfall event) — alternates ~30min ACTIVE phase and
+  // ~30min COOLDOWN phase (60min full cycle). No official server anchor is
+  // published, so this approximates the cycle as aligned to the PH clock's
+  // :22:27 mark being the START of an ACTIVE phase (and :52:27 the start of
+  // COOLDOWN). Nudge GRAVITY_ANCHOR_OFFSET_SEC (0 - 3599) or flip which phase
+  // starts at the anchor if you find it's drifted from what you see in-game.
+  const GRAVITY_PHASE_MIN = 30;
+  const GRAVITY_ANCHOR_OFFSET_SEC = 22*60 + 27; // :22:27 = start of ACTIVE phase
+  function gravityPhaseShifted(shiftedNow){
     const dayStart = new Date(shiftedNow);
     dayStart.setUTCHours(0,0,0,0);
-    const cycleMs = GRAVITY_CYCLE_MIN*60*1000;
+    const phaseMs = GRAVITY_PHASE_MIN*60*1000;
+    const cycleMs = phaseMs*2;
     const offsetMs = GRAVITY_ANCHOR_OFFSET_SEC*1000;
     const sinceAnchor = (shiftedNow - dayStart) - offsetMs;
     const msIntoCycle = ((sinceAnchor % cycleMs) + cycleMs) % cycleMs;
-    const msUntilNext = cycleMs - msIntoCycle;
-    return new Date(shiftedNow.getTime() + msUntilNext);
+    if(msIntoCycle < phaseMs){
+      // Active phase: counting down to when it ends (cooldown starts)
+      return { active:true, msRemaining: phaseMs - msIntoCycle };
+    }
+    // Cooldown phase: counting down to when the next active phase starts
+    return { active:false, msRemaining: cycleMs - msIntoCycle };
   }
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
@@ -798,12 +808,16 @@
     const elChip = document.getElementById('hudElChip');
     if(elChip) elChip.classList.toggle('urgent', elMs < 3600000);
 
-    const gravityNext = nextGravityShifted(shiftedNow);
-    const gravityMs = gravityNext - shiftedNow;
+    const gravityPhase = gravityPhaseShifted(shiftedNow);
     const gravityEl = document.getElementById('hudGravity');
-    if(gravityEl) gravityEl.textContent = fmtCountdown(gravityMs);
+    if(gravityEl) gravityEl.textContent = fmtCountdown(gravityPhase.msRemaining);
+    const gravityLabelEl = document.getElementById('hudGravityLabel');
+    if(gravityLabelEl) gravityLabelEl.textContent = gravityPhase.active ? 'Gravity · time remaining' : 'Gravity · time to start';
     const gravityChip = document.getElementById('hudGravityChip');
-    if(gravityChip) gravityChip.classList.toggle('urgent', gravityMs < 300000);
+    if(gravityChip){
+      gravityChip.classList.toggle('active', gravityPhase.active);
+      gravityChip.classList.toggle('urgent', !gravityPhase.active && gravityPhase.msRemaining < 300000);
+    }
 
     const totalEl = document.getElementById('hudTotal');
     if(totalEl) totalEl.textContent = accounts.length;
