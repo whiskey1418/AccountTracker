@@ -437,6 +437,11 @@
         <span class="at-hud-value" id="hudGravity">--</span>
         <span class="at-hud-breakdown">Starfall · ~30min phases, est.</span>
       </div>
+      <div class="at-hud-chip" id="hudRelicChip">
+        <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
+        <span class="at-hud-value" id="hudRelic">--</span>
+        <span class="at-hud-breakdown">Openable window incl. grace, est.</span>
+      </div>
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
         <span class="at-hud-value" id="hudTotal">0</span>
@@ -598,7 +603,9 @@
   // starts at the anchor if you find it's drifted from what you see in-game.
   const GRAVITY_PHASE_MIN = 30;
   const GRAVITY_ANCHOR_OFFSET_SEC = 22*60 + 27; // :22:27 = start of ACTIVE phase
-  function gravityPhaseShifted(shiftedNow){
+  // Shared cycle math so Gravity and the Relic window stay perfectly in sync
+  // (both start counting at the same anchor moment).
+  function gravityCycleProgress(shiftedNow){
     const dayStart = new Date(shiftedNow);
     dayStart.setUTCHours(0,0,0,0);
     const phaseMs = GRAVITY_PHASE_MIN*60*1000;
@@ -606,12 +613,33 @@
     const offsetMs = GRAVITY_ANCHOR_OFFSET_SEC*1000;
     const sinceAnchor = (shiftedNow - dayStart) - offsetMs;
     const msIntoCycle = ((sinceAnchor % cycleMs) + cycleMs) % cycleMs;
+    return { msIntoCycle, phaseMs, cycleMs };
+  }
+  function gravityPhaseShifted(shiftedNow){
+    const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
     if(msIntoCycle < phaseMs){
       // Active phase: counting down to when it ends (cooldown starts)
       return { active:true, msRemaining: phaseMs - msIntoCycle };
     }
     // Cooldown phase: counting down to when the next active phase starts
     return { active:false, msRemaining: cycleMs - msIntoCycle };
+  }
+  // Relic openable window — opens at the same moment Gravity's ACTIVE phase
+  // starts, but stays open a bit longer than Gravity does (a "grace" period
+  // that bleeds into the start of Gravity's cooldown). No official duration
+  // is published; RELIC_GRACE_MIN is an estimate based on observed remaining
+  // time. Nudge it up/down (minutes) if you see it drift from what you
+  // observe in-game — e.g. if the relic closes earlier/later than shown.
+  const RELIC_GRACE_MIN = 10;
+  function relicWindowShifted(shiftedNow){
+    const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
+    const relicOpenMs = phaseMs + RELIC_GRACE_MIN*60*1000;
+    if(msIntoCycle < relicOpenMs){
+      // Openable: counting down to when the relic window closes
+      return { open:true, msRemaining: relicOpenMs - msIntoCycle };
+    }
+    // Closed: counting down to when the next relic window opens
+    return { open:false, msRemaining: cycleMs - msIntoCycle };
   }
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
@@ -817,6 +845,17 @@
     if(gravityChip){
       gravityChip.classList.toggle('active', gravityPhase.active);
       gravityChip.classList.toggle('urgent', !gravityPhase.active && gravityPhase.msRemaining < 300000);
+    }
+
+    const relicWindow = relicWindowShifted(shiftedNow);
+    const relicEl = document.getElementById('hudRelic');
+    if(relicEl) relicEl.textContent = fmtCountdown(relicWindow.msRemaining);
+    const relicLabelEl = document.getElementById('hudRelicLabel');
+    if(relicLabelEl) relicLabelEl.textContent = relicWindow.open ? 'Relic · time remaining' : 'Relic · time to open';
+    const relicChip = document.getElementById('hudRelicChip');
+    if(relicChip){
+      relicChip.classList.toggle('active', relicWindow.open);
+      relicChip.classList.toggle('urgent', relicWindow.open && relicWindow.msRemaining < 300000);
     }
 
     const totalEl = document.getElementById('hudTotal');
