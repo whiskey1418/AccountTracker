@@ -500,7 +500,7 @@
             <div class="at-hud-body">
               <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
               <span class="at-hud-value" id="hudRelic">--</span>
-              <span class="at-hud-breakdown">Window incl. grace, est.</span>
+              <span class="at-hud-breakdown">Opens with Gravity · duration varies, check in-game</span>
             </div>
           </div>
         </div>
@@ -693,23 +693,12 @@
     // Cooldown phase: counting down to when the next active phase starts
     return { active:false, msRemaining: cycleMs - msIntoCycle };
   }
-  // Relic openable window — opens at the same moment Gravity's ACTIVE phase
-  // starts, but stays open a bit longer than Gravity does (a "grace" period
-  // that bleeds into the start of Gravity's cooldown). No official duration
-  // is published; RELIC_GRACE_SEC is an estimate based on observed remaining
-  // time. Nudge it up/down (seconds) if you see it drift from what you
-  // observe in-game — e.g. if the relic closes earlier/later than shown.
-  const RELIC_GRACE_SEC = 8*60 + 34; // 8m34s — derived from Gravity-time-to-start(24m26s) + observed relic remaining(3m) at same moment
-  function relicWindowShifted(shiftedNow){
-    const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
-    const relicOpenMs = phaseMs + RELIC_GRACE_SEC*1000;
-    if(msIntoCycle < relicOpenMs){
-      // Openable: counting down to when the relic window closes
-      return { open:true, msRemaining: relicOpenMs - msIntoCycle };
-    }
-    // Closed: counting down to when the next relic window opens
-    return { open:false, msRemaining: cycleMs - msIntoCycle };
-  }
+  // Relic openable window opens at the same moment Gravity's ACTIVE phase
+  // starts (confirmed by observation), but its close time is NOT reliably
+  // predictable — observed total open durations varied ~33-39min across
+  // different relic spawns, so no fixed formula fits. See updateHud() for
+  // how the Relic chip handles this (mirrors Gravity's own countdown
+  // instead of guessing a close time).
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
     const mm = String(shiftedNow.getUTCMinutes()).padStart(2,'0');
@@ -921,23 +910,33 @@
       gravityRing.style.setProperty('--ring-pct', gravityPct.toFixed(1));
     }
 
-    const relicWindow = relicWindowShifted(shiftedNow);
     const relicEl = document.getElementById('hudRelic');
-    if(relicEl) relicEl.textContent = fmtCountdown(relicWindow.msRemaining);
     const relicLabelEl = document.getElementById('hudRelicLabel');
-    if(relicLabelEl) relicLabelEl.textContent = relicWindow.open ? 'Relic · time remaining' : 'Relic · time to open';
     const relicChip = document.getElementById('hudRelicChip');
-    if(relicChip){
-      relicChip.classList.toggle('active', relicWindow.open);
-      relicChip.classList.toggle('urgent', relicWindow.open && relicWindow.msRemaining < 300000);
-    }
     const relicRing = document.getElementById('hudRelicRing');
-    if(relicRing){
-      const relicOpenMs = GRAVITY_PHASE_MIN*60*1000 + RELIC_GRACE_SEC*1000;
-      const relicClosedMs = GRAVITY_PHASE_MIN*60*1000*2 - relicOpenMs;
-      const relicDenom = relicWindow.open ? relicOpenMs : relicClosedMs;
-      const relicPct = Math.max(0, Math.min(100, (relicWindow.msRemaining / relicDenom) * 100));
-      relicRing.style.setProperty('--ring-pct', relicPct.toFixed(1));
+    // Relic's exact close time isn't reliably predictable (observed open
+    // durations varied ~33-39min across spawns), so rather than show a
+    // precise but potentially-wrong countdown, the chip only tracks what's
+    // certain: the Relic window opens the moment Gravity's active phase
+    // starts. While Gravity is active we show "Open now"; once Gravity goes
+    // to cooldown we count down to the next opening (same as the Gravity
+    // chip's own countdown, since that's the trigger).
+    if(gravityPhase.active){
+      if(relicEl) relicEl.textContent = 'Open now';
+      if(relicLabelEl) relicLabelEl.textContent = 'Relic · status';
+      if(relicChip){ relicChip.classList.add('active'); relicChip.classList.remove('urgent'); }
+      if(relicRing) relicRing.style.setProperty('--ring-pct', '100');
+    } else {
+      if(relicEl) relicEl.textContent = fmtCountdown(gravityPhase.msRemaining);
+      if(relicLabelEl) relicLabelEl.textContent = 'Relic · opens in';
+      if(relicChip){
+        relicChip.classList.remove('active');
+        relicChip.classList.toggle('urgent', gravityPhase.msRemaining < 300000);
+      }
+      if(relicRing){
+        const relicPct = Math.max(0, Math.min(100, (gravityPhase.msRemaining / (GRAVITY_PHASE_MIN*60*1000)) * 100));
+        relicRing.style.setProperty('--ring-pct', relicPct.toFixed(1));
+      }
     }
 
     const totalEl = document.getElementById('hudTotal');
