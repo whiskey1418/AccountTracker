@@ -630,7 +630,7 @@
   // is published; RELIC_GRACE_SEC is an estimate based on observed remaining
   // time. Nudge it up/down (seconds) if you see it drift from what you
   // observe in-game — e.g. if the relic closes earlier/later than shown.
-  const RELIC_GRACE_SEC = 9*60 + 30; // 9m30s — trimmed 30s after in-game check
+  const RELIC_GRACE_SEC = 8*60 + 34; // 8m34s — derived from Gravity-time-to-start(24m26s) + observed relic remaining(3m) at same moment
   function relicWindowShifted(shiftedNow){
     const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
     const relicOpenMs = phaseMs + RELIC_GRACE_SEC*1000;
