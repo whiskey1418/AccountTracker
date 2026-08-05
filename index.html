@@ -110,29 +110,13 @@
   .at-sub{font-size:13px; color:var(--muted); margin:0; line-height:1.55; max-width:640px;}
 
   .at-hud{
-    display:flex; flex-wrap:wrap; align-items:stretch; margin-top:20px; padding-top:18px;
+    display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; padding-top:18px;
     border-top:1px solid var(--line-soft); position:relative; z-index:1;
-  }
-  .at-hud-group{
-    display:flex; flex-direction:column; gap:9px; padding:0 18px; justify-content:flex-start;
-  }
-  .at-hud-group:first-child{padding-left:0;}
-  .at-hud-group.starfall{flex:1 1 300px;}
-  .at-hud-grouplabel{
-    font-family:var(--font-mono); font-size:9px; letter-spacing:2.5px; text-transform:uppercase;
-    color:var(--muted); opacity:.7;
-  }
-  .at-hud-row{display:flex; gap:10px; flex-wrap:wrap; flex:1;}
-  .at-hud-divider{width:1px; align-self:stretch; background:var(--line-soft); margin:2px 4px;}
-  @media (max-width:760px){
-    .at-hud-divider{display:none;}
-    .at-hud-group{padding:0 !important; width:100%; padding-top:10px !important; border-top:1px dashed var(--line-soft);}
-    .at-hud-group:first-child{border-top:none; padding-top:0 !important;}
   }
   .at-hud-chip{
     font-family:var(--font-mono); font-size:11px; color:var(--muted);
     background:var(--surface2); border:1px solid var(--line); border-radius:10px;
-    padding:10px 14px; display:flex; flex-direction:column; gap:4px; flex:1 1 140px; min-width:132px;
+    padding:10px 14px; display:flex; flex-direction:column; gap:4px; flex:1 1 150px; min-width:140px;
     transition:border-color .2s, transform .2s;
   }
   .at-hud-chip:hover{border-color:var(--accent-dim); transform:translateY(-1px);}
@@ -145,30 +129,6 @@
   .at-hud-chip.active .at-hud-value{color:var(--accent);}
   .at-hud-chip.active .at-hud-label{color:var(--accent);}
 
-  /* ---- Starfall ring chips (signature) ---- */
-  .at-hud-chip.ring{flex-direction:row; align-items:center; gap:11px; flex:1 1 190px;}
-  .at-hud-body{display:flex; flex-direction:column; gap:3px; min-width:0;}
-  .at-hud-ringwrap{
-    --ring-pct:0; width:36px; height:36px; border-radius:50%; flex-shrink:0; position:relative;
-    background:conic-gradient(var(--signal) calc(var(--ring-pct)*1%), var(--line) 0);
-    transition:background .3s linear;
-  }
-  .at-hud-chip.ring.active .at-hud-ringwrap{
-    background:conic-gradient(var(--accent) calc(var(--ring-pct)*1%), var(--accent-dim) 0);
-  }
-  .at-hud-chip.ring.urgent .at-hud-ringwrap{
-    background:conic-gradient(var(--warn) calc(var(--ring-pct)*1%), rgba(255,180,84,0.18) 0);
-  }
-  .at-hud-ringcore{
-    position:absolute; inset:3px; border-radius:50%; background:var(--surface2);
-    display:flex; align-items:center; justify-content:center;
-  }
-  .at-hud-ringcore::after{
-    content:''; width:5px; height:5px; border-radius:50%; background:var(--signal); box-shadow:0 0 6px var(--signal);
-  }
-  .at-hud-chip.ring.active .at-hud-ringcore::after{background:var(--accent); box-shadow:0 0 6px var(--accent);}
-  .at-hud-chip.ring.urgent .at-hud-ringcore::after{background:var(--warn); box-shadow:0 0 6px var(--warn);}
-
   /* ---- Tabs ---- */
   .at-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
   .at-tab{
@@ -180,6 +140,12 @@
   .at-tab.active{
     background:var(--accent-soft); color:var(--accent); border-color:var(--accent);
     font-weight:600; box-shadow:0 0 0 1px var(--accent) inset;
+  }
+  .at-tab.inprogress-tab{ margin-left:auto; }
+  .at-tab.inprogress-tab .inprogress-tag{ background:var(--signal); box-shadow:0 0 6px var(--signal); }
+  .at-tab.inprogress-tab.active{
+    background:var(--signal-dim); color:var(--signal); border-color:var(--signal);
+    box-shadow:0 0 0 1px var(--signal) inset;
   }
 
   /* ---- Buttons ---- */
@@ -456,65 +422,36 @@
       <div class="at-radar"></div>
     </div>
     <div class="at-hud">
-      <div class="at-hud-group">
-        <span class="at-hud-grouplabel">Clock</span>
-        <div class="at-hud-row">
-          <div class="at-hud-chip">
-            <span class="at-hud-label">PH time · UTC+8</span>
-            <span class="at-hud-value" id="hudClock">--:--:--</span>
-          </div>
-        </div>
+      <div class="at-hud-chip">
+        <span class="at-hud-label">PH time · UTC+8</span>
+        <span class="at-hud-value" id="hudClock">--:--:--</span>
       </div>
-      <div class="at-hud-divider"></div>
-      <div class="at-hud-group">
-        <span class="at-hud-grouplabel">Reset windows</span>
-        <div class="at-hud-row">
-          <div class="at-hud-chip" id="hudDailyChip">
-            <span class="at-hud-label">Daily reset in</span>
-            <span class="at-hud-value" id="hudDaily">--</span>
-          </div>
-          <div class="at-hud-chip" id="hudWeeklyChip">
-            <span class="at-hud-label">UFO reset in</span>
-            <span class="at-hud-value" id="hudWeekly">--</span>
-          </div>
-          <div class="at-hud-chip" id="hudElChip">
-            <span class="at-hud-label">EL reset in</span>
-            <span class="at-hud-value" id="hudEl">--</span>
-          </div>
-        </div>
+      <div class="at-hud-chip" id="hudDailyChip">
+        <span class="at-hud-label">Daily reset in</span>
+        <span class="at-hud-value" id="hudDaily">--</span>
       </div>
-      <div class="at-hud-divider"></div>
-      <div class="at-hud-group starfall">
-        <span class="at-hud-grouplabel">Starfall event</span>
-        <div class="at-hud-row">
-          <div class="at-hud-chip ring" id="hudGravityChip">
-            <span class="at-hud-ringwrap" id="hudGravityRing"><span class="at-hud-ringcore"></span></span>
-            <div class="at-hud-body">
-              <span class="at-hud-label" id="hudGravityLabel">Gravity · time to start</span>
-              <span class="at-hud-value" id="hudGravity">--</span>
-              <span class="at-hud-breakdown">~30min phases, est.</span>
-            </div>
-          </div>
-          <div class="at-hud-chip ring" id="hudRelicChip">
-            <span class="at-hud-ringwrap" id="hudRelicRing"><span class="at-hud-ringcore"></span></span>
-            <div class="at-hud-body">
-              <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
-              <span class="at-hud-value" id="hudRelic">--</span>
-              <span class="at-hud-breakdown">~33m38s window, est. — can run longer</span>
-            </div>
-          </div>
-        </div>
+      <div class="at-hud-chip" id="hudWeeklyChip">
+        <span class="at-hud-label">UFO reset in</span>
+        <span class="at-hud-value" id="hudWeekly">--</span>
       </div>
-      <div class="at-hud-divider"></div>
-      <div class="at-hud-group">
-        <span class="at-hud-grouplabel">Roster</span>
-        <div class="at-hud-row">
-          <div class="at-hud-chip">
-            <span class="at-hud-label">Accounts</span>
-            <span class="at-hud-value" id="hudTotal">0</span>
-            <span class="at-hud-breakdown" id="hudBreakdown"></span>
-          </div>
-        </div>
+      <div class="at-hud-chip" id="hudElChip">
+        <span class="at-hud-label">EL reset in</span>
+        <span class="at-hud-value" id="hudEl">--</span>
+      </div>
+      <div class="at-hud-chip" id="hudGravityChip">
+        <span class="at-hud-label" id="hudGravityLabel">Gravity · time to start</span>
+        <span class="at-hud-value" id="hudGravity">--</span>
+        <span class="at-hud-breakdown">Starfall · ~30min phases, est.</span>
+      </div>
+      <div class="at-hud-chip" id="hudRelicChip">
+        <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
+        <span class="at-hud-value" id="hudRelic">--</span>
+        <span class="at-hud-breakdown">Openable window incl. grace, est.</span>
+      </div>
+      <div class="at-hud-chip">
+        <span class="at-hud-label">Roster</span>
+        <span class="at-hud-value" id="hudTotal">0</span>
+        <span class="at-hud-breakdown" id="hudBreakdown"></span>
       </div>
     </div>
   </div>
@@ -693,20 +630,21 @@
     // Cooldown phase: counting down to when the next active phase starts
     return { active:false, msRemaining: cycleMs - msIntoCycle };
   }
-  // Relic openable window opens at the same moment Gravity's ACTIVE phase
-  // starts. Its close time is an ESTIMATE derived from observed spawns:
-  // three consistent samples put total open duration at ~33m38s (30min
-  // Gravity phase + ~3m38s grace) — see RELIC_GRACE_SEC below. One earlier
-  // sample ran notably longer (~38-39min), so treat this as a good estimate
-  // that can occasionally run short, not a guarantee. Nudge RELIC_GRACE_SEC
-  // if you collect more data and the pattern shifts.
-  const RELIC_GRACE_SEC = 3*60 + 38; // 3m38s
+  // Relic openable window — opens at the same moment Gravity's ACTIVE phase
+  // starts, but stays open a bit longer than Gravity does (a "grace" period
+  // that bleeds into the start of Gravity's cooldown). No official duration
+  // is published; RELIC_GRACE_MIN is an estimate based on observed remaining
+  // time. Nudge it up/down (minutes) if you see it drift from what you
+  // observe in-game — e.g. if the relic closes earlier/later than shown.
+  const RELIC_GRACE_MIN = 10;
   function relicWindowShifted(shiftedNow){
     const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
-    const relicOpenMs = phaseMs + RELIC_GRACE_SEC*1000;
+    const relicOpenMs = phaseMs + RELIC_GRACE_MIN*60*1000;
     if(msIntoCycle < relicOpenMs){
+      // Openable: counting down to when the relic window closes
       return { open:true, msRemaining: relicOpenMs - msIntoCycle };
     }
+    // Closed: counting down to when the next relic window opens
     return { open:false, msRemaining: cycleMs - msIntoCycle };
   }
   function fmtClock(shiftedNow){
@@ -811,10 +749,21 @@
     return !!(doneTs && doneTs >= mostRecentRealEpoch);
   }
 
+  // Same "is this account's UFO mid-run flag still valid" check used inside
+  // the account card, pulled out so the In-progress tab/filter can reuse it.
+  function isAccountInProgress(account){
+    const shiftedNow = nowShifted();
+    const mostRecentShifted = mostRecentWeeklyReset(shiftedNow);
+    const mostRecentRealEpoch = shiftedToRealEpoch(mostRecentShifted);
+    const progTs = account.ufoInProgress;
+    const isDone = isAccountDone(account, 'ufo');
+    return !!(progTs && progTs >= mostRecentRealEpoch && !isDone);
+  }
+
   function renderProgress(){
     const wrap = document.getElementById('atProgress');
     if(!wrap) return;
-    const filtered = activeTab==='ALL' ? accounts : accounts.filter(a=>a.server===activeTab);
+    const filtered = getTabFiltered(accounts);
     wrap.innerHTML = '';
     if(filtered.length===0){ return; }
     [
@@ -914,29 +863,16 @@
       gravityChip.classList.toggle('active', gravityPhase.active);
       gravityChip.classList.toggle('urgent', !gravityPhase.active && gravityPhase.msRemaining < 300000);
     }
-    const gravityRing = document.getElementById('hudGravityRing');
-    if(gravityRing){
-      const gravityPct = Math.max(0, Math.min(100, (gravityPhase.msRemaining / (GRAVITY_PHASE_MIN*60*1000)) * 100));
-      gravityRing.style.setProperty('--ring-pct', gravityPct.toFixed(1));
-    }
 
-    const relicEl = document.getElementById('hudRelic');
-    const relicLabelEl = document.getElementById('hudRelicLabel');
-    const relicChip = document.getElementById('hudRelicChip');
-    const relicRing = document.getElementById('hudRelicRing');
     const relicWindow = relicWindowShifted(shiftedNow);
+    const relicEl = document.getElementById('hudRelic');
     if(relicEl) relicEl.textContent = fmtCountdown(relicWindow.msRemaining);
-    if(relicLabelEl) relicLabelEl.textContent = relicWindow.open ? 'Relic · est. time left' : 'Relic · opens in';
+    const relicLabelEl = document.getElementById('hudRelicLabel');
+    if(relicLabelEl) relicLabelEl.textContent = relicWindow.open ? 'Relic · time remaining' : 'Relic · time to open';
+    const relicChip = document.getElementById('hudRelicChip');
     if(relicChip){
       relicChip.classList.toggle('active', relicWindow.open);
       relicChip.classList.toggle('urgent', relicWindow.open && relicWindow.msRemaining < 300000);
-    }
-    if(relicRing){
-      const relicOpenMs = GRAVITY_PHASE_MIN*60*1000 + RELIC_GRACE_SEC*1000;
-      const relicClosedMs = GRAVITY_PHASE_MIN*60*1000*2 - relicOpenMs;
-      const relicDenom = relicWindow.open ? relicOpenMs : relicClosedMs;
-      const relicPct = Math.max(0, Math.min(100, (relicWindow.msRemaining / relicDenom) * 100));
-      relicRing.style.setProperty('--ring-pct', relicPct.toFixed(1));
     }
 
     const totalEl = document.getElementById('hudTotal');
@@ -953,6 +889,15 @@
   }
 
   // ---------- Rendering ----------
+  // Returns the accounts belonging to whichever tab is currently selected.
+  // 'INPROGRESS' is a special pseudo-tab (not a server) that shows every
+  // account with a live UFO in-progress flag, regardless of which server
+  // it's on, so those runs are easy to find in one place.
+  function getTabFiltered(list){
+    if(activeTab==='INPROGRESS') return list.filter(isAccountInProgress);
+    return activeTab==='ALL' ? list : list.filter(a=>a.server===activeTab);
+  }
+
   function renderTabs(){
     const wrap = document.getElementById('atTabs');
     wrap.innerHTML = '';
@@ -965,6 +910,13 @@
       btn.onclick = ()=>{ activeTab = s.id; renderAll(); };
       wrap.appendChild(btn);
     });
+
+    const inProgCount = accounts.filter(isAccountInProgress).length;
+    const progBtn = document.createElement('button');
+    progBtn.className = 'at-tab inprogress-tab' + (activeTab==='INPROGRESS' ? ' active' : '');
+    progBtn.innerHTML = '<span class="at-dot-tag inprogress-tag"></span>In progress · ' + inProgCount;
+    progBtn.onclick = ()=>{ activeTab = 'INPROGRESS'; renderAll(); };
+    wrap.appendChild(progBtn);
   }
 
   // Reorder an account up/down within its Steam-login group (matches the
@@ -1374,7 +1326,7 @@
     const grid = document.getElementById('atGrid');
     grid.innerHTML = '';
     grid.classList.remove('at-grid');
-    let filtered = activeTab==='ALL' ? accounts : accounts.filter(a=>a.server===activeTab);
+    let filtered = getTabFiltered(accounts);
     if(searchQuery){
       filtered = filtered.filter(a=>{
         const name = (a.name||'').toLowerCase();
@@ -1389,7 +1341,9 @@
       empty.className = 'at-empty';
       empty.textContent = searchQuery
         ? 'No accounts match "' + searchQuery + '".'
-        : 'No accounts here yet. Add one to start tracking resets.';
+        : (activeTab==='INPROGRESS'
+            ? 'No UFO runs marked in progress right now.'
+            : 'No accounts here yet. Add one to start tracking resets.');
       grid.appendChild(empty);
       return;
     }
