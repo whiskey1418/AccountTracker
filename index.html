@@ -627,13 +627,13 @@
   // Relic openable window — opens at the same moment Gravity's ACTIVE phase
   // starts, but stays open a bit longer than Gravity does (a "grace" period
   // that bleeds into the start of Gravity's cooldown). No official duration
-  // is published; RELIC_GRACE_MIN is an estimate based on observed remaining
-  // time. Nudge it up/down (minutes) if you see it drift from what you
+  // is published; RELIC_GRACE_SEC is an estimate based on observed remaining
+  // time. Nudge it up/down (seconds) if you see it drift from what you
   // observe in-game — e.g. if the relic closes earlier/later than shown.
-  const RELIC_GRACE_MIN = 10;
+  const RELIC_GRACE_SEC = 9*60 + 30; // 9m30s — trimmed 30s after in-game check
   function relicWindowShifted(shiftedNow){
     const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
-    const relicOpenMs = phaseMs + RELIC_GRACE_MIN*60*1000;
+    const relicOpenMs = phaseMs + RELIC_GRACE_SEC*1000;
     if(msIntoCycle < relicOpenMs){
       // Openable: counting down to when the relic window closes
       return { open:true, msRemaining: relicOpenMs - msIntoCycle };
