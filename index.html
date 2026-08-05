@@ -500,7 +500,7 @@
             <div class="at-hud-body">
               <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
               <span class="at-hud-value" id="hudRelic">--</span>
-              <span class="at-hud-breakdown">Opens with Gravity · duration varies, check in-game</span>
+              <span class="at-hud-breakdown">~33m38s window, est. — can run longer</span>
             </div>
           </div>
         </div>
@@ -694,11 +694,21 @@
     return { active:false, msRemaining: cycleMs - msIntoCycle };
   }
   // Relic openable window opens at the same moment Gravity's ACTIVE phase
-  // starts (confirmed by observation), but its close time is NOT reliably
-  // predictable — observed total open durations varied ~33-39min across
-  // different relic spawns, so no fixed formula fits. See updateHud() for
-  // how the Relic chip handles this (mirrors Gravity's own countdown
-  // instead of guessing a close time).
+  // starts. Its close time is an ESTIMATE derived from observed spawns:
+  // three consistent samples put total open duration at ~33m38s (30min
+  // Gravity phase + ~3m38s grace) — see RELIC_GRACE_SEC below. One earlier
+  // sample ran notably longer (~38-39min), so treat this as a good estimate
+  // that can occasionally run short, not a guarantee. Nudge RELIC_GRACE_SEC
+  // if you collect more data and the pattern shifts.
+  const RELIC_GRACE_SEC = 3*60 + 38; // 3m38s
+  function relicWindowShifted(shiftedNow){
+    const { msIntoCycle, phaseMs, cycleMs } = gravityCycleProgress(shiftedNow);
+    const relicOpenMs = phaseMs + RELIC_GRACE_SEC*1000;
+    if(msIntoCycle < relicOpenMs){
+      return { open:true, msRemaining: relicOpenMs - msIntoCycle };
+    }
+    return { open:false, msRemaining: cycleMs - msIntoCycle };
+  }
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
     const mm = String(shiftedNow.getUTCMinutes()).padStart(2,'0');
@@ -914,29 +924,19 @@
     const relicLabelEl = document.getElementById('hudRelicLabel');
     const relicChip = document.getElementById('hudRelicChip');
     const relicRing = document.getElementById('hudRelicRing');
-    // Relic's exact close time isn't reliably predictable (observed open
-    // durations varied ~33-39min across spawns), so rather than show a
-    // precise but potentially-wrong countdown, the chip only tracks what's
-    // certain: the Relic window opens the moment Gravity's active phase
-    // starts. While Gravity is active we show "Open now"; once Gravity goes
-    // to cooldown we count down to the next opening (same as the Gravity
-    // chip's own countdown, since that's the trigger).
-    if(gravityPhase.active){
-      if(relicEl) relicEl.textContent = 'Open now';
-      if(relicLabelEl) relicLabelEl.textContent = 'Relic · status';
-      if(relicChip){ relicChip.classList.add('active'); relicChip.classList.remove('urgent'); }
-      if(relicRing) relicRing.style.setProperty('--ring-pct', '100');
-    } else {
-      if(relicEl) relicEl.textContent = fmtCountdown(gravityPhase.msRemaining);
-      if(relicLabelEl) relicLabelEl.textContent = 'Relic · opens in';
-      if(relicChip){
-        relicChip.classList.remove('active');
-        relicChip.classList.toggle('urgent', gravityPhase.msRemaining < 300000);
-      }
-      if(relicRing){
-        const relicPct = Math.max(0, Math.min(100, (gravityPhase.msRemaining / (GRAVITY_PHASE_MIN*60*1000)) * 100));
-        relicRing.style.setProperty('--ring-pct', relicPct.toFixed(1));
-      }
+    const relicWindow = relicWindowShifted(shiftedNow);
+    if(relicEl) relicEl.textContent = fmtCountdown(relicWindow.msRemaining);
+    if(relicLabelEl) relicLabelEl.textContent = relicWindow.open ? 'Relic · est. time left' : 'Relic · opens in';
+    if(relicChip){
+      relicChip.classList.toggle('active', relicWindow.open);
+      relicChip.classList.toggle('urgent', relicWindow.open && relicWindow.msRemaining < 300000);
+    }
+    if(relicRing){
+      const relicOpenMs = GRAVITY_PHASE_MIN*60*1000 + RELIC_GRACE_SEC*1000;
+      const relicClosedMs = GRAVITY_PHASE_MIN*60*1000*2 - relicOpenMs;
+      const relicDenom = relicWindow.open ? relicOpenMs : relicClosedMs;
+      const relicPct = Math.max(0, Math.min(100, (relicWindow.msRemaining / relicDenom) * 100));
+      relicRing.style.setProperty('--ring-pct', relicPct.toFixed(1));
     }
 
     const totalEl = document.getElementById('hudTotal');
