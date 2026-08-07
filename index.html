@@ -834,6 +834,22 @@
         renderAll();
       };
       card.appendChild(resetAllBtn);
+
+      const resetInheritBtn = document.createElement('button');
+      resetInheritBtn.className = 'at-btn small ghost';
+      resetInheritBtn.style.marginTop = '8px';
+      resetInheritBtn.style.marginLeft = '8px';
+      resetInheritBtn.textContent = 'Set all to not inherited';
+      resetInheritBtn.title = 'Set every Inherit account back to not inherited';
+      resetInheritBtn.onclick = async ()=>{
+        const ok = await showConfirm('Set all '+dscpAccounts.length+' Inherit account'+(dscpAccounts.length===1?'':'s')+' back to not inherited?', 'Reset all');
+        if(!ok) return;
+        dscpAccounts.forEach(a=>{ a.inheritDone = null; });
+        await saveAccounts();
+        renderAll();
+      };
+      card.appendChild(resetInheritBtn);
+
       wrap.appendChild(card);
     }
   }
