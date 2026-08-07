@@ -243,10 +243,6 @@
     transition:border-color .2s;
   }
   .at-tracker.done{border-color:var(--accent-dim);}
-  .at-tracker:has(.at-tracker-toprow){display:block;}
-  .at-tracker-toprow{display:flex; align-items:center; justify-content:space-between; gap:8px;}
-  .at-tracker .at-el-manual{margin-top:8px; margin-bottom:0;}
-  .at-tracker .at-el-editrow.open{margin-top:6px;}
   .at-tracker-left{display:flex; align-items:center; gap:9px;}
   .at-dot{width:8px; height:8px; border-radius:50%; background:var(--muted); flex-shrink:0;}
   .at-tracker.done .at-dot{background:var(--accent); box-shadow:0 0 8px var(--accent);}
@@ -1233,69 +1229,13 @@
     btn.onclick = async ()=>{
       if(btn.disabled) return;
       account.inheritDone = Date.now();
+      account.points = 0;
       await saveAccounts();
       renderAll();
     };
 
-    const topRow = document.createElement('div');
-    topRow.className = 'at-tracker-toprow';
-    topRow.appendChild(left);
-    topRow.appendChild(btn);
-
-    // Manual date edit — lets you back-date or correct the inherit timestamp
-    // (e.g. logging it late, or importing a date from another device) instead
-    // of only being able to stamp "now", plus a way to undo a mis-tap.
-    const manualToggle = document.createElement('div'); manualToggle.className='at-el-manual';
-    manualToggle.innerHTML = '<span class="at-el-manual-label"><span class="at-el-manual-chevron">▸</span>Edit inherit date / cooldown</span>';
-
-    const editRow = document.createElement('div'); editRow.className='at-el-editrow';
-    const dateInput = document.createElement('input');
-    dateInput.type = 'datetime-local';
-    dateInput.className = 'at-el-input';
-    function toLocalInputValue(ts){
-      const d = new Date(ts);
-      const pad = n => String(n).padStart(2,'0');
-      return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
-    }
-    dateInput.value = last ? toLocalInputValue(last) : toLocalInputValue(Date.now());
-
-    const setDateBtn = document.createElement('button');
-    setDateBtn.className='at-btn small'; setDateBtn.textContent='Set date';
-    setDateBtn.title = 'Set the exact date/time this account last inherited — cooldown recalculates from this';
-
-    const clearBtn = document.createElement('button');
-    clearBtn.className='at-btn small ghost'; clearBtn.textContent='Clear';
-    clearBtn.title = 'Reset back to "never inherited" (undo a mistaken mark)';
-
-    async function commitInherit(newVal){
-      account.inheritDone = newVal;
-      await saveAccounts();
-      renderAll();
-    }
-
-    setDateBtn.onclick = ()=>{
-      const v = dateInput.value;
-      if(!v) return;
-      const ts = new Date(v).getTime();
-      if(!isNaN(ts)) commitInherit(ts);
-    };
-    clearBtn.onclick = async ()=>{
-      const ok = await showConfirm('Clear the inherit date for '+(account.name||'this account')+'? It will show as "never inherited".', 'Clear');
-      if(ok) commitInherit(null);
-    };
-    dateInput.addEventListener('keydown', e=>{ if(e.key==='Enter') setDateBtn.click(); });
-
-    manualToggle.onclick = ()=>{
-      editRow.classList.toggle('open');
-      manualToggle.querySelector('.at-el-manual-chevron').classList.toggle('open');
-      if(editRow.classList.contains('open')) dateInput.focus();
-    };
-
-    editRow.appendChild(dateInput); editRow.appendChild(setDateBtn); editRow.appendChild(clearBtn);
-
-    row.appendChild(topRow);
-    row.appendChild(manualToggle);
-    row.appendChild(editRow);
+    row.appendChild(left);
+    row.appendChild(btn);
     row._timerNode = timer;
     row._recalc = ()=>{
       const now2 = Date.now();
