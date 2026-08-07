@@ -1232,27 +1232,33 @@
   }
 
   function inheritNode(account){
-    const isDone = !!account.inheritDone;
+    const now = Date.now();
+    const last = account.inheritDone || null;
+    const nextAvail = last ? last + INHERIT_COOLDOWN_MS : null;
+    const onCooldown = !!(nextAvail && nextAvail > now);
 
     const row = document.createElement('div');
-    row.className = 'at-tracker' + (isDone ? ' done' : '');
+    row.className = 'at-tracker' + (!onCooldown && last ? ' done' : '') + (onCooldown && (nextAvail-now) < 3600000 ? ' urgent':'');
 
     const left = document.createElement('div');
     left.className = 'at-tracker-left';
     const dot = document.createElement('span'); dot.className='at-dot';
     const labelWrap = document.createElement('div');
     const label = document.createElement('div'); label.className='at-tracker-label';
-    label.textContent = 'Inherit deviant';
+    label.textContent = 'Inherit deviant · 7d cd';
     const timer = document.createElement('div'); timer.className='at-tracker-timer';
-    timer.textContent = isDone ? 'inherited' : 'not inherited';
+    timer.textContent = onCooldown ? ('available in ' + fmtCountdown(nextAvail-now)) : (last ? 'ready to inherit' : 'never inherited');
     labelWrap.appendChild(label); labelWrap.appendChild(timer);
     left.appendChild(dot); left.appendChild(labelWrap);
 
     const btn = document.createElement('button');
     btn.className = 'at-check';
-    btn.textContent = isDone ? 'Inherited ✓' : 'Mark inherited';
+    btn.textContent = onCooldown ? 'On cooldown' : 'Mark inherited';
+    btn.disabled = onCooldown;
     btn.onclick = async ()=>{
-      account.inheritDone = isDone ? null : Date.now();
+      if(btn.disabled) return;
+      account.inheritDone = Date.now();
+      account.points = POINTS_CAP;
       await saveAccounts();
       renderAll();
     };
@@ -1261,11 +1267,19 @@
     row.appendChild(btn);
     row._timerNode = timer;
     row._recalc = ()=>{
-      const d = !!account.inheritDone;
-      timer.textContent = d ? 'inherited' : 'not inherited';
-      row.classList.toggle('done', d);
+      const now2 = Date.now();
+      const last2 = account.inheritDone || null;
+      const nextAvail2 = last2 ? last2 + INHERIT_COOLDOWN_MS : null;
+      const onCd2 = !!(nextAvail2 && nextAvail2 > now2);
+      timer.textContent = onCd2 ? ('available in ' + fmtCountdown(nextAvail2-now2)) : (last2 ? 'ready to inherit' : 'never inherited');
+      const stillUrgent = onCd2 && (nextAvail2-now2) < 3600000;
+      row.classList.toggle('done', !onCd2 && !!last2);
+      row.classList.toggle('urgent', stillUrgent);
       const b = row.querySelector('.at-check');
-      if(b) b.textContent = d ? 'Inherited ✓' : 'Mark inherited';
+      if(b){
+        b.disabled = onCd2;
+        b.textContent = onCd2 ? 'On cooldown' : 'Mark inherited';
+      }
     };
     return row;
   }
