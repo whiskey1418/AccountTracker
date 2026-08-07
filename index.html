@@ -129,6 +129,20 @@
   .at-hud-chip.active .at-hud-value{color:var(--accent);}
   .at-hud-chip.active .at-hud-label{color:var(--accent);}
 
+  #hudGravityChip{ position:relative; }
+  .at-notify-btn{
+    position:absolute; top:8px; right:8px; width:22px; height:22px; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:6px; border:1px solid var(--line); background:var(--surface3);
+    color:var(--muted); font-size:11px; line-height:1; cursor:pointer; transition:.18s ease;
+  }
+  .at-notify-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .at-notify-btn.on{
+    background:var(--accent-soft); border-color:var(--accent); color:var(--accent);
+    box-shadow:0 0 8px rgba(111,255,176,0.35);
+  }
+  .at-notify-btn.unsupported{ opacity:.4; cursor:not-allowed; }
+
   /* ---- Tabs ---- */
   .at-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
   .at-tab{
@@ -439,6 +453,7 @@
         <span class="at-hud-value" id="hudEl">--</span>
       </div>
       <div class="at-hud-chip" id="hudGravityChip">
+        <button type="button" id="gravityNotifyBtn" class="at-notify-btn" title="Gravity start alerts: off">🔕</button>
         <span class="at-hud-label" id="hudGravityLabel">Gravity · time to start</span>
         <span class="at-hud-value" id="hudGravity">--</span>
         <span class="at-hud-breakdown">Starfall · ~30min phases, est.</span>
@@ -609,6 +624,13 @@
   // starts at the anchor if you find it's drifted from what you see in-game.
   const GRAVITY_PHASE_MIN = 30;
   const GRAVITY_ANCHOR_OFFSET_SEC = 22*60 + 27; // :22:27 = start of ACTIVE phase
+  // How far ahead of the ACTIVE phase starting to fire the desktop/PWA
+  // notification, if the user has turned the bell on. Nudge this (ms) if
+  // you want more/less heads-up time.
+  const GRAVITY_NOTIFY_LEAD_MS = 60*1000; // 1 minute before start
+  const GRAVITY_NOTIFY_KEY = 'zt_gravity_notify_enabled';
+  let gravityNotifyEnabled = localStorage.getItem(GRAVITY_NOTIFY_KEY) === '1';
+  let gravityNotifyArmed = true; // resets each cooldown so it only fires once per cycle
   // Shared cycle math so Gravity and the Relic window stay perfectly in sync
   // (both start counting at the same anchor moment).
   function gravityCycleProgress(shiftedNow){
@@ -647,6 +669,82 @@
     // Closed: counting down to when the next relic window opens
     return { open:false, msRemaining: cycleMs - msIntoCycle };
   }
+  // ---------- Gravity start notification ----------
+  function setGravityNotifyBtnState(){
+    const btn = document.getElementById('gravityNotifyBtn');
+    if(!btn) return;
+    const supported = 'Notification' in window;
+    if(!supported){
+      btn.classList.add('unsupported');
+      btn.textContent = '🔕';
+      btn.title = 'Notifications not supported on this browser/device';
+      return;
+    }
+    const on = gravityNotifyEnabled && Notification.permission === 'granted';
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = on ? '🔔' : '🔕';
+    btn.title = on
+      ? 'Gravity start alerts: ON — click to turn off'
+      : 'Gravity start alerts: OFF — click to turn on';
+  }
+
+  async function toggleGravityNotify(){
+    if(!('Notification' in window)){
+      alert("This browser doesn't support notifications.");
+      return;
+    }
+    if(!gravityNotifyEnabled){
+      let perm = Notification.permission;
+      if(perm === 'default'){
+        perm = await Notification.requestPermission();
+      }
+      if(perm !== 'granted'){
+        alert('Notifications are blocked for this site. Enable them in your browser/site settings to get a heads-up before Gravity starts.');
+        setGravityNotifyBtnState();
+        return;
+      }
+      gravityNotifyEnabled = true;
+      gravityNotifyArmed = true; // ready to fire on the next qualifying window
+    } else {
+      gravityNotifyEnabled = false;
+    }
+    localStorage.setItem(GRAVITY_NOTIFY_KEY, gravityNotifyEnabled ? '1' : '0');
+    setGravityNotifyBtnState();
+  }
+
+  function fireGravityNotification(){
+    const title = 'Gravity Abyss starting soon';
+    const opts = {
+      body: 'Active phase begins in about a minute.',
+      icon: 'icon-192.png',
+      badge: 'icon-192.png',
+      tag: 'gravity-alert'
+    };
+    try{
+      if('serviceWorker' in navigator && navigator.serviceWorker.ready){
+        navigator.serviceWorker.ready.then(reg=>{
+          if(reg && reg.showNotification) reg.showNotification(title, opts);
+          else new Notification(title, opts);
+        }).catch(()=>{ try{ new Notification(title, opts); }catch(e){} });
+      } else {
+        new Notification(title, opts);
+      }
+    }catch(e){}
+  }
+
+  function checkGravityNotify(gravityPhase){
+    if(!gravityNotifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+    if(gravityPhase.active){
+      gravityNotifyArmed = true; // re-arm for the next cooldown -> active transition
+      return;
+    }
+    if(gravityNotifyArmed && gravityPhase.msRemaining <= GRAVITY_NOTIFY_LEAD_MS){
+      fireGravityNotification();
+      gravityNotifyArmed = false;
+    }
+  }
+
   function fmtClock(shiftedNow){
     const hh = String(shiftedNow.getUTCHours()).padStart(2,'0');
     const mm = String(shiftedNow.getUTCMinutes()).padStart(2,'0');
@@ -892,6 +990,7 @@
       gravityChip.classList.toggle('active', gravityPhase.active);
       gravityChip.classList.toggle('urgent', !gravityPhase.active && gravityPhase.msRemaining < 300000);
     }
+    checkGravityNotify(gravityPhase);
 
     const relicWindow = relicWindowShifted(shiftedNow);
     const relicEl = document.getElementById('hudRelic');
@@ -1617,6 +1716,9 @@
     document.getElementById('atApp').style.display='block';
     document.getElementById('atAddBtn').onclick = ()=> openAccountModal(null);
     document.getElementById('atRetrySave').onclick = ()=> saveAccounts();
+    const gravityBtn = document.getElementById('gravityNotifyBtn');
+    if(gravityBtn) gravityBtn.onclick = toggleGravityNotify;
+    setGravityNotifyBtnState();
     const searchInput = document.getElementById('atSearch');
     if(searchInput){
       searchInput.addEventListener('input', ()=>{
