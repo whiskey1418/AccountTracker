@@ -235,6 +235,10 @@
     font-family:var(--font-mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
     padding:4px 9px; border-radius:6px; border:1px solid var(--line); color:var(--muted);
   }
+  .at-badge.relic{border-color:var(--accent-dim); color:var(--accent);}
+  .at-badge.ufo{border-color:var(--signal-dim); color:var(--signal);}
+  .at-badge.crop{border-color:var(--inherit-dim); color:var(--inherit);}
+  .at-field-row{flex-wrap:wrap;}
   .at-cardactions{display:flex; gap:4px;}
   .at-iconbtn{
     background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:5px;
@@ -249,6 +253,16 @@
     border-radius:8px; padding:8px 10px; font-size:12.5px; font-family:var(--font-body);
   }
   .at-select:focus, .at-input:focus{outline:none; border-color:var(--accent);}
+  .at-checkrow{display:flex; flex-wrap:wrap; gap:14px; margin-top:2px;}
+  .at-checklabel{
+    display:flex; align-items:center; gap:7px; font-size:12.5px; font-family:var(--font-body);
+    color:var(--text); cursor:pointer; user-select:none;
+  }
+  .at-checklabel input[type="checkbox"]{
+    width:16px; height:16px; accent-color:var(--accent); cursor:pointer;
+  }
+  .at-checklabel.disabled{color:var(--muted); cursor:not-allowed;}
+  .at-checklabel.disabled input{cursor:not-allowed;}
 
   .at-trackers{margin-top:14px; display:flex; flex-direction:column; gap:8px;}
   .at-tracker{
@@ -837,6 +851,17 @@
     if(bar) bar.style.display='none';
   }
 
+  // Whether this account farms RELIC / UFO at all. Older saved accounts won't
+  // have these fields yet, so missing tracksRelic defaults to true (everyone
+  // used to track RELIC) and missing tracksUfo falls back to the old
+  // EDY2-only assumption, so nothing changes for existing data until edited.
+  function accountTracksRelic(account){
+    return account.tracksRelic !== false;
+  }
+  function accountTracksUfo(account){
+    return account.tracksUfo !== undefined ? !!account.tracksUfo : account.server==='EDY2';
+  }
+
   function isAccountDone(account, type){
     const shiftedNow = nowShifted();
     const isDaily = type==='relic';
@@ -855,7 +880,7 @@
     const mostRecentRealEpoch = shiftedToRealEpoch(mostRecentShifted);
     const progTs = account.ufoInProgress;
     const isDone = isAccountDone(account, 'ufo');
-    return !!(progTs && progTs >= mostRecentRealEpoch && !isDone);
+    return !!(accountTracksUfo(account) && progTs && progTs >= mostRecentRealEpoch && !isDone);
   }
 
   function renderProgress(){
@@ -865,8 +890,8 @@
     wrap.innerHTML = '';
     if(filtered.length===0){ return; }
     [
-      {key:'relic', label:'RELIC · today', scope: filtered},
-      {key:'ufo', label:'UFO · this week', scope: filtered.filter(a=>a.server==='EDY2')}
+      {key:'relic', label:'RELIC · today', scope: filtered.filter(accountTracksRelic)},
+      {key:'ufo', label:'UFO · this week', scope: filtered.filter(accountTracksUfo)}
     ].forEach(cfg=>{
       const total = cfg.scope.length;
       if(total===0) return;
@@ -1429,15 +1454,39 @@
     const roleBadge = document.createElement('span'); roleBadge.className='at-badge';
     roleBadge.textContent = account.role ? account.role : 'no role set';
     roleRow.appendChild(roleBadge);
+    if(account.role==='Gardener' && account.crop){
+      const cropBadge = document.createElement('span'); cropBadge.className='at-badge crop';
+      cropBadge.textContent = account.crop;
+      roleRow.appendChild(cropBadge);
+    }
+    const tracksRelic = accountTracksRelic(account);
+    const tracksUfo = accountTracksUfo(account);
+    if(tracksRelic){
+      const relicBadge = document.createElement('span'); relicBadge.className='at-badge relic';
+      relicBadge.textContent = 'RELIC';
+      roleRow.appendChild(relicBadge);
+    }
+    if(tracksUfo){
+      const ufoBadge = document.createElement('span'); ufoBadge.className='at-badge ufo';
+      ufoBadge.textContent = 'UFO';
+      roleRow.appendChild(ufoBadge);
+    }
     card.appendChild(roleRow);
 
     const trackers = document.createElement('div'); trackers.className='at-trackers';
-    trackers.appendChild(trackerNode(account,'relic'));
-    if(account.server==='EDY2'){
+    if(tracksRelic){
+      trackers.appendChild(trackerNode(account,'relic'));
+    }
+    if(tracksUfo){
       trackers.appendChild(trackerNode(account,'ufo'));
     }
     if(account.server==='INHERIT'){
       trackers.appendChild(inheritNode(account));
+    }
+    if(!tracksRelic && !tracksUfo && account.server!=='INHERIT'){
+      const none = document.createElement('div'); none.className='at-hint';
+      none.textContent = 'No RELIC or UFO tracking enabled — edit the account to turn one on.';
+      trackers.appendChild(none);
     }
     card.appendChild(trackers);
 
@@ -1461,7 +1510,8 @@
         const name = (a.name||'').toLowerCase();
         const steam = (a.steamGroup||'').toLowerCase();
         const role = (a.role||'').toLowerCase();
-        return name.includes(searchQuery) || steam.includes(searchQuery) || role.includes(searchQuery);
+        const crop = (a.crop||'').toLowerCase();
+        return name.includes(searchQuery) || steam.includes(searchQuery) || role.includes(searchQuery) || crop.includes(searchQuery);
       });
     }
     if(filtered.length===0){
@@ -1577,6 +1627,23 @@
         <label>Role</label>
         <select class="at-select" id="mRole"></select>
         <p class="at-hint" id="mRoleHint"></p>
+        <div id="mCropRow" style="display:none;">
+          <label>Crop planted</label>
+          <select class="at-select" id="mCrop">
+            <option value="Onion">Onion</option>
+            <option value="Mushroom">Mushroom</option>
+          </select>
+        </div>
+        <label>Tracks</label>
+        <div class="at-checkrow">
+          <label class="at-checklabel" id="mTrackRelicLabel">
+            <input type="checkbox" id="mTrackRelic"> RELIC (daily)
+          </label>
+          <label class="at-checklabel" id="mTrackUfoLabel">
+            <input type="checkbox" id="mTrackUfo"> UFO (weekly)
+          </label>
+        </div>
+        <p class="at-hint" id="mTrackHint">UFO is only available on EDY2.</p>
         <div class="at-modal-actions">
           ${isEdit ? '<button class="at-btn ghost" id="mDelete" style="color:var(--danger); border-color:var(--danger); margin-right:auto;">Delete account</button>' : ''}
           <button class="at-btn ghost" id="mCancel">Cancel</button>
@@ -1588,6 +1655,12 @@
     const serverSel = backdrop.querySelector('#mServer');
     const roleSel = backdrop.querySelector('#mRole');
     const roleHint = backdrop.querySelector('#mRoleHint');
+    const cropRow = backdrop.querySelector('#mCropRow');
+    const cropSel = backdrop.querySelector('#mCrop');
+    const trackRelicChk = backdrop.querySelector('#mTrackRelic');
+    const trackUfoChk = backdrop.querySelector('#mTrackUfo');
+    const trackUfoLabel = backdrop.querySelector('#mTrackUfoLabel');
+    const trackHint = backdrop.querySelector('#mTrackHint');
 
     function populateRoles(serverValue, preferredRole){
       const options = ROLES[serverValue] || [];
@@ -1602,16 +1675,51 @@
         : serverValue==='INHERIT'
         ? 'Chef and Gardener are available. Inherit accounts track points and the 7-day Inherit Deviant cooldown separately from regular DSCP Y2.'
         : 'Chef and Gardener are available on DSCP Y2.';
+      updateCropRow();
     }
+
+    // Gardener accounts also track which crop they planted (Onion or Mushroom).
+    function updateCropRow(preferredCrop){
+      const show = roleSel.value === 'Gardener';
+      cropRow.style.display = show ? 'block' : 'none';
+      if(show){
+        cropSel.value = (preferredCrop && ['Onion','Mushroom'].includes(preferredCrop)) ? preferredCrop : (cropSel.value || 'Onion');
+      }
+    }
+    roleSel.addEventListener('change', ()=> updateCropRow());
+
+    // UFO only runs on EDY2, so lock the checkbox off (and grey it out) on
+    // other servers instead of letting it silently do nothing.
+    function updateTrackAvailability(){
+      const ufoAvailable = serverSel.value === 'EDY2';
+      trackUfoChk.disabled = !ufoAvailable;
+      trackUfoLabel.classList.toggle('disabled', !ufoAvailable);
+      if(!ufoAvailable) trackUfoChk.checked = false;
+      trackHint.textContent = ufoAvailable
+        ? 'Turn off either one if this account doesn\'t farm it.'
+        : 'UFO is only available on EDY2 — switch server to enable it.';
+    }
+    serverSel.addEventListener('change', updateTrackAvailability);
 
     if(isEdit){
       serverSel.value = existing.server;
       backdrop.querySelector('#mName').value = existing.name||'';
       backdrop.querySelector('#mSteam').value = existing.steamGroup||'Steam 1 - artemis14180';
+      trackRelicChk.checked = accountTracksRelic(existing);
+      trackUfoChk.checked = accountTracksUfo(existing);
     } else {
       backdrop.querySelector('#mSteam').value = 'Steam 1 - artemis14180';
+      trackRelicChk.checked = true;
+      trackUfoChk.checked = serverSel.value === 'EDY2';
     }
     populateRoles(serverSel.value, isEdit ? existing.role : null);
+    updateCropRow(isEdit ? existing.crop : null);
+    updateTrackAvailability();
+    if(isEdit){
+      // updateTrackAvailability may have just re-forced UFO off; restore the
+      // saved value if it's still valid for this server.
+      trackUfoChk.checked = accountTracksUfo(existing) && serverSel.value === 'EDY2';
+    }
     serverSel.addEventListener('change', ()=> populateRoles(serverSel.value, null));
 
     backdrop.querySelector('#mCancel').onclick = ()=> backdrop.remove();
@@ -1631,10 +1739,14 @@
       const role = roleSel.value;
       const server = serverSel.value;
       const steamGroup = backdrop.querySelector('#mSteam').value.trim();
+      const crop = role === 'Gardener' ? cropSel.value : null;
+      const tracksRelic = !!trackRelicChk.checked;
+      const tracksUfo = server === 'EDY2' && !!trackUfoChk.checked;
       if(isEdit){
         existing.name=name; existing.role=role; existing.server=server; existing.steamGroup=steamGroup;
+        existing.crop=crop; existing.tracksRelic=tracksRelic; existing.tracksUfo=tracksUfo;
       } else {
-        accounts.push({id:uid(), name, role, server, steamGroup, relicDone:null, ufoDone:null, ufoInProgress:null, el:0, points:0, inheritDone:null});
+        accounts.push({id:uid(), name, role, server, steamGroup, crop, tracksRelic, tracksUfo, relicDone:null, ufoDone:null, ufoInProgress:null, el:0, points:0, inheritDone:null});
       }
       await saveAccounts();
       backdrop.remove();
