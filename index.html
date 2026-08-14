@@ -297,6 +297,18 @@
   .at-el-timer{font-family:var(--font-mono); font-size:10px; color:var(--muted); margin:-3px 0 9px; letter-spacing:.3px;}
   .at-el.urgent{border-color:rgba(255,180,84,0.4);}
   .at-el.urgent .at-el-timer{color:var(--warn);}
+  .at-el-transferrow{display:flex; align-items:center; justify-content:space-between; margin:-2px 0 9px; gap:8px;}
+  .at-el-transfer-btn{
+    font-family:var(--font-mono); font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;
+    display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:999px;
+    border:1px solid var(--line); background:var(--surface); color:var(--muted); cursor:pointer; transition:.15s ease;
+  }
+  .at-el-transfer-btn:hover{border-color:var(--accent); color:var(--text);}
+  .at-el-transfer-btn::before{content:''; width:6px; height:6px; border-radius:50%; background:var(--line); flex-shrink:0;}
+  .at-el-transfer-btn.on{
+    background:var(--accent-soft); border-color:var(--accent); color:var(--accent);
+  }
+  .at-el-transfer-btn.on::before{background:var(--accent); box-shadow:0 0 6px var(--accent);}
   .at-el-bar{height:7px; border-radius:999px; background:var(--surface3); overflow:hidden; margin-bottom:10px; box-shadow:inset 0 1px 2px rgba(0,0,0,0.3);}
   .at-el-fill{height:100%; background:linear-gradient(90deg, var(--signal), var(--accent)); border-radius:999px; transition:width .35s ease; box-shadow:0 0 10px -2px var(--accent);}
   .at-el-fill.full{background:linear-gradient(90deg, var(--warn), var(--danger)); box-shadow:0 0 10px -2px var(--danger);}
@@ -543,6 +555,14 @@
   let searchQuery = '';
   let collapsedGroups = new Set();
 
+  // Compact number formatting for EL amounts, e.g. 500000 -> "500k", 1000000 -> "1M".
+  function fmtCompactEL(n){
+    n = Math.max(0, Number(n) || 0);
+    if(n >= 1000000) return (n/1000000).toFixed(n % 1000000 === 0 ? 0 : 1).replace(/\.0$/,'') + 'M';
+    if(n >= 1000) return (n/1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(/\.0$/,'') + 'k';
+    return String(n);
+  }
+
   function elNextResetShifted(shiftedNow){
     const mr = mostRecentWeeklyResetForDay(shiftedNow, EL_RESET_DAY);
     return nextReset(mr, 7);
@@ -561,6 +581,7 @@
       const lastReset = a.elResetAt || 0;
       if(lastReset < mrWedReal){
         if((Number(a.el)||0) !== 0){ a.el = 0; }
+        if(a.elTransferred){ a.elTransferred = false; }
         a.elResetAt = mrWedReal;
         changed = true;
       }
@@ -1184,7 +1205,8 @@
     const head = document.createElement('div'); head.className='at-el-head';
     const label = document.createElement('span'); label.className='at-el-label'; label.textContent='EL sold';
     const amount = document.createElement('span'); amount.className='at-el-amount'+(isFull?' full':'');
-    amount.textContent = used.toLocaleString() + ' / ' + EL_CAP.toLocaleString() + (isFull?' · LIMIT':'');
+    amount.textContent = fmtCompactEL(used) + ' / ' + fmtCompactEL(EL_CAP) + ' EL' + (isFull?' · LIMIT':'');
+    amount.title = used.toLocaleString() + ' / ' + EL_CAP.toLocaleString() + ' EL';
     head.appendChild(label); head.appendChild(amount);
 
     const timer = document.createElement('div'); timer.className='at-el-timer';
@@ -1196,6 +1218,22 @@
     }
     updateElTimer();
     wrap._recalc = updateElTimer;
+
+    // Manual "did I move this week's EL out of the account yet" marker. Purely
+    // informational — doesn't change the sold amount or the Wednesday reset,
+    // it just clears itself alongside el back to false on the next reset.
+    const transferRow = document.createElement('div'); transferRow.className='at-el-transferrow';
+    const transferBtn = document.createElement('button');
+    transferBtn.type = 'button';
+    transferBtn.className = 'at-el-transfer-btn' + (account.elTransferred ? ' on' : '');
+    transferBtn.textContent = account.elTransferred ? 'Transferred' : 'Not transferred';
+    transferBtn.title = 'Mark whether this account\'s EL has been transferred out yet this week';
+    transferBtn.onclick = async ()=>{
+      account.elTransferred = !account.elTransferred;
+      await saveAccounts();
+      renderAll();
+    };
+    transferRow.appendChild(transferBtn);
 
     const bar = document.createElement('div'); bar.className='at-el-bar';
     const fill = document.createElement('div'); fill.className='at-el-fill'+(isFull?' full':'');
@@ -1253,7 +1291,7 @@
     };
     resetBtn.onclick = async ()=>{
       const ok = await showConfirm('Reset EL sold for '+(account.name||'this account')+' back to 0?', 'Reset');
-      if(ok) commit(0);
+      if(ok){ account.elTransferred = false; commit(0); }
     };
     input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
 
@@ -1265,7 +1303,7 @@
 
     editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
 
-    wrap.appendChild(head); wrap.appendChild(timer); wrap.appendChild(bar);
+    wrap.appendChild(head); wrap.appendChild(timer); wrap.appendChild(transferRow); wrap.appendChild(bar);
     wrap.appendChild(quickRow); wrap.appendChild(manualToggle); wrap.appendChild(editRow);
     return wrap;
   }
