@@ -277,6 +277,12 @@
   .at-tracker-label{font-size:12.5px; font-weight:600;}
   .at-tracker-timer{font-family:var(--font-mono); font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .at-tracker.urgent .at-tracker-timer{color:var(--warn);}
+  .at-tracker-gc{font-family:var(--font-mono); font-size:10px; color:var(--signal); margin-top:2px; letter-spacing:.2px;}
+  .at-tracker-gc.partial{color:var(--warn);}
+  .at-tracker-gc.capped{color:var(--danger);}
+  .at-tracker.capped{border-color:rgba(255,107,110,0.35); opacity:.85;}
+  .at-tracker.capped .at-check{border-color:rgba(255,107,110,0.35); color:var(--danger);}
+  .at-tracker.capped .at-check:hover{border-color:var(--danger); color:var(--danger);}
   .at-check{
     font-family:var(--font-mono); font-size:11px; padding:6px 12px; border-radius:7px;
     border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer;
@@ -354,6 +360,8 @@
   .at-group-head:hover{color:var(--accent);}
   .at-group-head::after{content:''; flex:1; height:1px; background:var(--line);}
   .at-group-count{color:var(--muted); letter-spacing:.5px; text-transform:none;}
+  .at-group-gc{font-family:var(--font-mono); color:var(--signal); letter-spacing:.5px; text-transform:none;}
+  .at-group-gc.capped{color:var(--danger);}
   .at-group-chevron{
     display:inline-block; font-size:10px; color:var(--muted); transition:transform .18s ease;
     transform:rotate(0deg);
@@ -550,6 +558,15 @@
   let tickHandle = null;
   const EL_CAP = 500000; // EDY2 sell limit per account
   const POINTS_CAP = 20000; // DSCP points cap per account
+
+  // UFO GC economy — per observation, a single Steam login only has room for
+  // 5 accounts' worth of full-value UFO GC per week (2,100 GC each) before
+  // the ~10k weekly GC cap on that login kicks in. A 6th account still nets
+  // a partial 1,050 GC; anything past that earns 0 and isn't worth running.
+  const GC_PER_UFO = 2100;
+  const GC_PARTIAL_UFO = 1050;
+  const GC_FULL_SLOTS = 5;
+  const GC_WEEKLY_CAP = 10000;
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
   const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
   let searchQuery = '';
@@ -904,6 +921,35 @@
     return !!(accountTracksUfo(account) && progTs && progTs >= mostRecentRealEpoch && !isDone);
   }
 
+  // GC state for a Steam login group: which UFO-tracking accounts under it
+  // are already marked done this week (oldest mark first), what each of
+  // those marks was worth, and the running total for the login.
+  function steamGroupUfoState(key){
+    const doneList = accounts.filter(a=>
+      (a.steamGroup ? a.steamGroup.trim() : '')===key && accountTracksUfo(a) && isAccountDone(a,'ufo')
+    ).sort((a,b)=>(a.ufoDone||0)-(b.ufoDone||0));
+    const rankAmount = (idx)=> idx<GC_FULL_SLOTS ? GC_PER_UFO : (idx===GC_FULL_SLOTS ? GC_PARTIAL_UFO : 0);
+    const total = doneList.reduce((sum,a,idx)=>sum+rankAmount(idx),0);
+    return { doneList, rankAmount, total };
+  }
+
+  // GC picture for one account: what it already earned if done, or what
+  // marking it done right now would earn (and whether that's 0 — capped).
+  function gcInfoForAccount(account){
+    const key = account.steamGroup ? account.steamGroup.trim() : '';
+    const state = steamGroupUfoState(key);
+    const isDone = isAccountDone(account,'ufo');
+    let earned = 0, nextAmount = 0, capped = false;
+    if(isDone){
+      const idx = state.doneList.findIndex(a=>a.id===account.id);
+      earned = idx>=0 ? state.rankAmount(idx) : 0;
+    } else {
+      nextAmount = state.rankAmount(state.doneList.length);
+      capped = nextAmount===0;
+    }
+    return { key, doneCount: state.doneList.length, totalGc: state.total, isDone, earned, nextAmount, capped };
+  }
+
   function renderProgress(){
     const wrap = document.getElementById('atProgress');
     if(!wrap) return;
@@ -1123,8 +1169,11 @@
     const progTs = account.ufoInProgress;
     const isInProgress = !isDaily && progTs && progTs >= mostRecentRealEpoch && !isDone;
 
+    // GC readout — UFO only, tied to the account's Steam login weekly cap.
+    const gc = isDaily ? null : gcInfoForAccount(account);
+
     const row = document.createElement('div');
-    row.className = 'at-tracker' + (isDone?' done':'') + (isInProgress?' inprogress':'') + ((nextShifted-shiftedNow) < 3600000 ? ' urgent':'');
+    row.className = 'at-tracker' + (isDone?' done':'') + (isInProgress?' inprogress':'') + ((nextShifted-shiftedNow) < 3600000 ? ' urgent':'') + (gc && gc.capped && !isDone ? ' capped':'');
 
     const left = document.createElement('div');
     left.className = 'at-tracker-left';
@@ -1135,6 +1184,25 @@
     const timer = document.createElement('div'); timer.className='at-tracker-timer';
     timer.textContent = 'resets in ' + fmtCountdown(nextShifted-shiftedNow);
     labelWrap.appendChild(label); labelWrap.appendChild(timer);
+
+    if(gc){
+      const gcLine = document.createElement('div'); gcLine.className='at-tracker-gc';
+      if(isDone){
+        gcLine.textContent = gc.earned>0
+          ? gc.earned.toLocaleString() + ' GC noted' + (gc.earned===GC_PARTIAL_UFO ? ' (partial)' : '')
+          : 'Marked · 0 GC (login was already capped)';
+        if(gc.earned===GC_PARTIAL_UFO) gcLine.classList.add('partial');
+        if(gc.earned===0) gcLine.classList.add('capped');
+      } else if(gc.capped){
+        gcLine.textContent = 'Steam login GC cap reached this week';
+        gcLine.classList.add('capped');
+      } else {
+        gcLine.textContent = gc.nextAmount.toLocaleString() + ' GC if marked now · ' + gc.doneCount + '/' + GC_FULL_SLOTS + ' full slots used';
+        if(gc.nextAmount===GC_PARTIAL_UFO) gcLine.classList.add('partial');
+      }
+      labelWrap.appendChild(gcLine);
+    }
+
     left.appendChild(dot); left.appendChild(labelWrap);
 
     const btnRow = document.createElement('div');
@@ -1156,9 +1224,24 @@
 
     const check = document.createElement('button');
     check.className = 'at-check';
-    check.textContent = isDone ? 'Done ✓' : 'Mark done';
+    if(isDone){
+      check.textContent = 'Done ✓';
+    } else if(gc && gc.capped){
+      check.textContent = 'Not worth it';
+      check.title = 'This Steam login already hit its weekly GC cap — running UFO here now would earn 0 GC. Tap to log it anyway if you ran it regardless.';
+    } else if(gc && gc.nextAmount===GC_PARTIAL_UFO){
+      check.textContent = 'Mark done (1,050 GC)';
+    } else if(gc){
+      check.textContent = 'Mark done (2,100 GC)';
+    } else {
+      check.textContent = 'Mark done';
+    }
     check.onclick = async ()=>{
       const newVal = isDone ? null : Date.now();
+      if(gc && gc.capped && !isDone){
+        const ok = await showConfirm('This Steam login\'s weekly GC cap is already hit — this account would earn 0 GC. Mark it done anyway?', 'Mark anyway');
+        if(!ok) return;
+      }
       account[doneField] = newVal;
       // Marking the weekly UFO done clears its in-progress flag too.
       if(!isDaily && newVal){
@@ -1584,7 +1667,12 @@
       section.className = 'at-group';
       const headEl = document.createElement('div');
       headEl.className = 'at-group-head' + (isCollapsed ? ' collapsed' : '');
-      headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>`;
+      const groupHasUfo = list.some(accountTracksUfo);
+      const gcState = groupHasUfo ? steamGroupUfoState(key) : null;
+      const gcTag = gcState
+        ? `<span class="at-group-gc${gcState.total>=GC_WEEKLY_CAP ? ' capped':''}">${gcState.total.toLocaleString()} / ${GC_WEEKLY_CAP.toLocaleString()} GC</span>`
+        : '';
+      headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>${gcTag}`;
       headEl.onclick = ()=>{
         if(collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
         renderGrid();
