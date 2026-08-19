@@ -646,19 +646,20 @@
 
   // GC economy — a single Steam login has ONE shared weekly GC "pool", and
   // RELIC and UFO both draw from that same pool (they are NOT separate caps
-  // each). It's not a hard 10k stop though: the pool tracks the first 5
-  // GC-earning events for that login (RELIC days + UFO completions, mixed
-  // together in the order they actually happened), and each of those first
-  // 5 pays its FULL amount even if that pushes the running total past 10k.
-  // Every event after the 5th — 6th, 7th, 8th... forever — pays HALF its
-  // normal amount instead of dropping to 0. UFO pays 2,100 GC full-rate /
-  // 1,050 half-rate per account; RELIC pays 2,000 GC full-rate / 1,000
-  // half-rate per day (shared across every account on that login, since
-  // it's one daily action).
+  // each). The pool tracks the first 5 GC-earning events for that login
+  // (RELIC days + UFO completions, mixed together in the order they
+  // actually happened), and each of those first 5 pays its FULL amount —
+  // even if that pushes the running total past 10k. Every event after the
+  // 5th — 6th, 7th, 8th... forever — earns 0 GC. So a login that only ever
+  // does UFO (never RELIC) can earn at most 5 × 2,100 = 10,500 GC/week,
+  // slightly over the reference 10k cap, then nothing further until reset.
+  // UFO pays 2,100 GC full-rate / 0 past the cutoff, per account. RELIC
+  // pays 2,000 GC full-rate / 0 past the cutoff, per day (shared across
+  // every account on that login, since it's one daily action).
   const GC_PER_UFO = 2100;
   const RELIC_GC_PER_DAY = 2000;
-  const GC_WEEKLY_CAP = 10000; // reference point only — pool total can exceed this once half-rate kicks in
-  const GC_FULL_RATE_EVENTS = 5; // first N events each week earn full rate; everything after earns half
+  const GC_WEEKLY_CAP = 10000; // reference point only — pool total can exceed this slightly (up to 10,500) since the 5th event still pays full
+  const GC_FULL_RATE_EVENTS = 5; // first N events each week earn full rate; everything after earns 0
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
   const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
   let searchQuery = '';
@@ -1049,7 +1050,7 @@
     if(!isDaily && !isDone && !opts.skipCappedConfirm){
       const gc = gcInfoForAccount(account);
       if(gc && gc.capped){
-        const ok = await showConfirm('This Steam login has already used its 5 full-rate GC slots this week — this account would earn ' + gc.nextAmount.toLocaleString() + ' GC (half rate) instead of ' + GC_PER_UFO.toLocaleString() + '. Mark it done anyway?', 'Mark anyway');
+        const ok = await showConfirm('This Steam login has already used its 5 full-rate GC slots this week — this account would earn 0 GC instead of ' + GC_PER_UFO.toLocaleString() + '. Mark it done anyway?', 'Mark anyway');
         if(!ok) return false;
       }
     }
@@ -1113,19 +1114,20 @@
     const ufoEarnedById = {};
     events.forEach((e, idx)=>{
       const fullRate = idx < GC_FULL_RATE_EVENTS;
-      const earned = fullRate ? e.amount : Math.round(e.amount/2);
+      const earned = fullRate ? e.amount : 0;
       running += earned;
       if(e.type==='relic'){ relicEarned += earned; relicEarnedByDate[e.ts] = earned; }
       else ufoEarnedById[e.account.id] = earned;
     });
 
     const eventsCount = events.length;
-    const halfRate = eventsCount >= GC_FULL_RATE_EVENTS; // true once the login's next event will only pay half
+    const pastCutoff = eventsCount >= GC_FULL_RATE_EVENTS; // true once the login's next event earns 0
 
     return {
       total: running,
-      capped: halfRate, // legacy name, now means "past full-rate — next event pays half, not 0"
-      halfRate,
+      capped: pastCutoff, // legacy name, now means "past the 5-event cutoff — next event earns 0"
+      halfRate: pastCutoff, // legacy name kept for compatibility, same meaning as capped/pastCutoff
+      pastCutoff,
       eventsCount,
       fullRateSlotsLeft: Math.max(0, GC_FULL_RATE_EVENTS - eventsCount),
       remaining: Math.max(0, GC_WEEKLY_CAP - running),
@@ -1139,7 +1141,7 @@
 
   // GC picture for one UFO account: what it already earned if done, or what
   // marking it done right now would earn — full rate while the login still
-  // has full-rate slots left this week, half rate forever after that.
+  // has full-rate slots left this week, 0 forever after that.
   function gcInfoForAccount(account){
     const key = gcPoolKey(account);
     const state = steamGroupCombinedGcState(key);
@@ -1148,18 +1150,18 @@
     if(isDone){
       earned = state.ufoEarnedById[account.id] || 0;
     } else {
-      nextAmount = state.halfRate ? Math.round(GC_PER_UFO/2) : GC_PER_UFO;
-      capped = state.halfRate;
+      nextAmount = state.pastCutoff ? 0 : GC_PER_UFO;
+      capped = state.pastCutoff;
     }
     return { key, totalGc: state.total, isDone, earned, nextAmount, capped, state };
   }
 
   // RELIC-only view into the combined state, for the pieces of the UI that
   // just need the RELIC side (days done / RELIC's share of the pool /
-  // whether the shared pool has moved to half-rate).
+  // whether the shared pool has moved past its 5-event cutoff).
   function relicGroupGcState(key){
     const state = steamGroupCombinedGcState(key);
-    return { daysDone: state.relicDaysDone, total: state.relicEarned, capped: state.halfRate, state };
+    return { daysDone: state.relicDaysDone, total: state.relicEarned, capped: state.pastCutoff, state };
   }
 
   // How much GC a specific day's RELIC completion actually earned for a
@@ -1341,9 +1343,9 @@
             </div>
           `;
           if(!relicDoneToday){
-            const todayAmount = state.halfRate ? Math.round(RELIC_GC_PER_DAY/2) : RELIC_GC_PER_DAY;
-            const tagClass = state.halfRate ? 'partial' : '';
-            const tagText = todayAmount.toLocaleString()+' GC today' + (state.halfRate ? ' (half rate)' : '');
+            const todayAmount = state.pastCutoff ? 0 : RELIC_GC_PER_DAY;
+            const tagClass = state.pastCutoff ? 'capped' : '';
+            const tagText = todayAmount.toLocaleString()+' GC today' + (state.pastCutoff ? ' (capped)' : '');
             const pendWrap = document.createElement('div');
             pendWrap.className = 'at-gc-pending';
             const item = document.createElement('div');
@@ -1407,8 +1409,8 @@
             pendWrap.className = 'at-gc-pending';
             pending.forEach(a=>{
               const info = gcInfoForAccount(a);
-              const tagClass = info.capped ? 'partial' : '';
-              const tagText = info.nextAmount.toLocaleString()+' GC' + (info.capped ? ' (half)' : '');
+              const tagClass = info.capped ? 'capped' : '';
+              const tagText = info.nextAmount.toLocaleString()+' GC' + (info.capped ? ' (capped)' : '');
               const label = a.name || 'Unnamed account';
               const item = document.createElement('div');
               item.className = 'at-gc-pending-item';
@@ -1589,9 +1591,10 @@
 
     // Total GC earned this week vs. the full-rate reference (10k) for every
     // Steam login's shared pool (RELIC + UFO together, one pool per login —
-    // not two independent caps). Actual earnable GC can run higher than
-    // this once a login moves past its 5 full-rate events into half-rate,
-    // so treat "possible" here as a floor, not a hard ceiling.
+    // not two independent caps). A login can earn up to 5 × its per-event
+    // amount before hitting 0, which can land slightly above 10k (e.g. an
+    // UFO-only login tops out at 10,500), so treat "possible" here as a
+    // floor, not a hard ceiling.
     const gcEl = document.getElementById('hudGc');
     const gcBreakdownEl = document.getElementById('hudGcBreakdown');
     if(gcEl){
@@ -1625,7 +1628,7 @@
       // have full-rate GC on the table. They're still visible/clickable in
       // the GC-by-Steam-login card.
       const key = account.steamGroup ? account.steamGroup.trim() : '';
-      if(steamGroupCombinedGcState(key).halfRate) ufoPending = false;
+      if(steamGroupCombinedGcState(key).pastCutoff) ufoPending = false;
     }
     return relicPending || ufoPending;
   }
@@ -1695,7 +1698,7 @@
 
     // GC readout — RELIC and UFO on this account's Steam login share ONE
     // weekly pool: the first 5 events (combined) pay full rate, everything
-    // after pays half rate. Both readouts below check the same halfRate
+    // after earns 0. Both readouts below check the same pastCutoff/capped
     // flag, not independent caps.
     const gc = isDaily ? null : gcInfoForAccount(account);
     const steamKey = gcPoolKey(account);
@@ -1703,7 +1706,7 @@
     const relicGcCappedToday = !!(relicGc && relicGc.capped && !isDone);
 
     const row = document.createElement('div');
-    row.className = 'at-tracker' + (isDone?' done':'') + (isInProgress?' inprogress':'') + ((nextShifted-shiftedNow) < 3600000 ? ' urgent':'') + (gc && gc.capped && !isDone ? ' partial':'') + (relicGcCappedToday ? ' partial':'');
+    row.className = 'at-tracker' + (isDone?' done':'') + (isInProgress?' inprogress':'') + ((nextShifted-shiftedNow) < 3600000 ? ' urgent':'') + (gc && gc.capped && !isDone ? ' capped':'') + (relicGcCappedToday ? ' capped':'');
 
     const left = document.createElement('div');
     left.className = 'at-tracker-left';
@@ -1717,13 +1720,13 @@
 
     if(gc){
       const gcLine = document.createElement('div'); gcLine.className='at-tracker-gc';
-      const partial = gc.earned>0 && gc.earned<GC_PER_UFO;
       if(isDone){
-        gcLine.textContent = gc.earned.toLocaleString() + ' GC noted' + (partial ? ' (half rate)' : '');
-        if(partial) gcLine.classList.add('partial');
+        const zero = gc.earned===0;
+        gcLine.textContent = gc.earned.toLocaleString() + ' GC noted' + (zero ? ' (past 5-event cutoff)' : '');
+        if(zero) gcLine.classList.add('capped');
       } else if(gc.capped){
-        gcLine.textContent = gc.nextAmount.toLocaleString() + ' GC if marked now (half rate) · ' + gc.totalGc.toLocaleString() + ' login pool this week';
-        gcLine.classList.add('partial');
+        gcLine.textContent = '0 GC if marked now — past this login\'s 5 full-rate events this week (' + gc.totalGc.toLocaleString() + ' login pool)';
+        gcLine.classList.add('capped');
       } else {
         gcLine.textContent = gc.nextAmount.toLocaleString() + ' GC if marked now · ' + gc.totalGc.toLocaleString() + '/' + GC_WEEKLY_CAP.toLocaleString() + ' login pool used';
       }
@@ -1734,13 +1737,12 @@
       const gcLine = document.createElement('div'); gcLine.className='at-tracker-gc';
       if(isDone){
         const earnedToday = relicDayGcAmount(steamKey, mostRecentRealEpoch);
-        const partial = earnedToday>0 && earnedToday<RELIC_GC_PER_DAY;
-        gcLine.textContent = earnedToday.toLocaleString() + ' GC noted today' + (partial ? ' (half rate)' : '');
-        if(partial) gcLine.classList.add('partial');
+        const zero = earnedToday===0;
+        gcLine.textContent = earnedToday.toLocaleString() + ' GC noted today' + (zero ? ' (past 5-event cutoff)' : '');
+        if(zero) gcLine.classList.add('capped');
       } else if(relicGc.capped){
-        const relicNext = Math.round(RELIC_GC_PER_DAY/2);
-        gcLine.textContent = relicNext.toLocaleString() + ' GC if marked now (half rate) · ' + relicGc.total.toLocaleString() + ' login pool this week';
-        gcLine.classList.add('partial');
+        gcLine.textContent = '0 GC if marked now — past this login\'s 5 full-rate events this week (' + relicGc.total.toLocaleString() + ' login pool)';
+        gcLine.classList.add('capped');
       } else {
         const relicNext = RELIC_GC_PER_DAY;
         gcLine.textContent = relicNext.toLocaleString() + ' GC if marked now · ' + relicGc.total.toLocaleString() + '/' + GC_WEEKLY_CAP.toLocaleString() + ' login pool used';
@@ -1772,14 +1774,13 @@
     if(isDone){
       check.textContent = 'Done ✓';
     } else if(isDaily && relicGc && relicGc.capped){
-      const relicNext = Math.round(RELIC_GC_PER_DAY/2);
-      check.textContent = 'Mark done (' + relicNext.toLocaleString() + ' GC · half)';
-      check.title = 'This Steam login has already used its 5 full-rate GC slots this week (RELIC and/or UFO combined) — today\'s RELIC still earns GC, just at half rate.';
+      check.textContent = 'Mark done (0 GC · capped)';
+      check.title = 'This Steam login has already used its 5 full-rate GC events this week (RELIC and/or UFO combined) — today\'s RELIC earns 0 GC.';
     } else if(isDaily && relicGc){
       check.textContent = 'Mark done (' + RELIC_GC_PER_DAY.toLocaleString() + ' GC)';
     } else if(gc && gc.capped){
-      check.textContent = 'Mark done (' + gc.nextAmount.toLocaleString() + ' GC · half)';
-      check.title = 'This Steam login has already used its 5 full-rate GC slots this week (RELIC and/or UFO combined) — this UFO run still earns GC, just at half rate.';
+      check.textContent = 'Mark done (0 GC · capped)';
+      check.title = 'This Steam login has already used its 5 full-rate GC events this week (RELIC and/or UFO combined) — this UFO run earns 0 GC.';
     } else if(gc){
       check.textContent = 'Mark done (' + gc.nextAmount.toLocaleString() + ' GC)';
     } else {
