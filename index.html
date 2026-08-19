@@ -431,6 +431,24 @@
     border-radius:999px; padding:3px 9px; cursor:pointer; transition:.15s ease;
   }
   .at-gc-done-btn:hover{background:var(--accent-dim); color:var(--text); transform:translateY(-1px);}
+  .at-gc-group-collapsed{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:10px 4px 10px; border-top:1px solid var(--line-soft); cursor:pointer;
+    transition:.15s ease;
+  }
+  .at-gc-group-collapsed:first-child{ border-top:none; padding-top:0; }
+  .at-gc-group-collapsed:hover .at-gc-collapsed-name{ color:var(--accent); }
+  .at-gc-collapsed-name{ font-size:11.5px; color:var(--text); font-weight:700; letter-spacing:.3px; transition:.15s ease; }
+  .at-gc-collapsed-done{
+    font-family:var(--font-mono); font-size:11px; color:var(--accent); white-space:nowrap;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .at-gc-collapse-btn{
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:.5px; text-transform:uppercase;
+    color:var(--muted); background:transparent; border:1px solid var(--line); border-radius:6px;
+    padding:2px 7px; margin-left:8px; cursor:pointer; transition:.15s ease;
+  }
+  .at-gc-collapse-btn:hover{ border-color:var(--accent); color:var(--accent); }
   .at-gc-done-btn.undo{
     color:var(--muted); background:var(--surface3); border-color:var(--line);
   }
@@ -620,6 +638,9 @@
   const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
   let searchQuery = '';
   let collapsedGroups = new Set();
+  // Steam-login GC cards that are fully done collapse to a one-line summary
+  // by default; user can tap to expand back to the full pending/undo view.
+  let expandedDoneSteamGroups = new Set();
 
   // Compact number formatting for EL amounts, e.g. 500000 -> "500k", 1000000 -> "1M".
   function fmtCompactEL(n){
@@ -1147,9 +1168,33 @@
     // the same login) — if we scoped this to the active tab, switching tabs
     // would silently hide GC that's already been earned by an account that
     // isn't on the current tab.
+    // Whether a Steam login has nothing left to click this week — RELIC
+    // (if tracked) marked done today, and every UFO account (if tracked)
+    // marked done. Used to collapse it out of the way, and to sort it
+    // below any login that still has something pending so pending logins
+    // are always the first thing you see. The moment anything resets
+    // (new day/week clears a done mark), this flips back to false and the
+    // login jumps back to the top on its own.
+    function steamGroupFullyDone(key){
+      const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+      const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+      if(!hasRelic && !hasUfo) return false;
+      if(hasRelic){
+        const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
+        if(!relicDoneToday) return false;
+      }
+      if(hasUfo){
+        const anyUfoPending = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key && !isAccountDone(a,'ufo'));
+        if(anyUfoPending) return false;
+      }
+      return true;
+    }
+
     const gcGroupKeys = Array.from(new Set(
       accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
     )).sort((x,y)=>{
+      const xDone = steamGroupFullyDone(x), yDone = steamGroupFullyDone(y);
+      if(xDone !== yDone) return xDone ? 1 : -1; // pending logins first, done logins sink down
       if(!x) return 1; if(!y) return -1;
       return x.localeCompare(y, undefined, {numeric:true});
     });
@@ -1161,11 +1206,42 @@
       const rowsWrap = document.createElement('div');
       rowsWrap.className = 'at-gc-summary';
       gcGroupKeys.forEach(key=>{
+        const fullyDone = steamGroupFullyDone(key);
+        if(!fullyDone) expandedDoneSteamGroups.delete(key); // stale expand flag from a previous done state
+        if(fullyDone && !expandedDoneSteamGroups.has(key)){
+          // Collapsed one-liner: name + total GC earned, tap to expand.
+          const state = steamGroupCombinedGcState(key);
+          const collapsedWrap = document.createElement('div');
+          collapsedWrap.className = 'at-gc-group at-gc-group-collapsed';
+          collapsedWrap.title = 'Tap to expand';
+          collapsedWrap.innerHTML = `
+            <span class="at-gc-collapsed-name">${key || 'No Steam login'}</span>
+            <span class="at-gc-collapsed-done">✓ Done · ${state.total.toLocaleString()} GC</span>
+          `;
+          collapsedWrap.onclick = ()=>{
+            expandedDoneSteamGroups.add(key);
+            renderProgress();
+          };
+          rowsWrap.appendChild(collapsedWrap);
+          return;
+        }
         const groupWrap = document.createElement('div');
         groupWrap.className = 'at-gc-group';
         const nameEl = document.createElement('div');
         nameEl.className = 'at-gc-group-name';
         nameEl.textContent = key || 'No Steam login';
+        if(fullyDone){
+          const collapseBtn = document.createElement('button');
+          collapseBtn.className = 'at-gc-collapse-btn';
+          collapseBtn.type = 'button';
+          collapseBtn.textContent = 'Collapse';
+          collapseBtn.title = 'Collapse back to a one-line summary';
+          collapseBtn.onclick = ()=>{
+            expandedDoneSteamGroups.delete(key);
+            renderProgress();
+          };
+          nameEl.appendChild(collapseBtn);
+        }
         groupWrap.appendChild(nameEl);
 
         const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
