@@ -701,6 +701,21 @@
     return changed;
   }
 
+  // GC pool identity for an account. Accounts that share the SAME typed
+  // Steam-login text deliberately share one weekly GC pool (that's the
+  // point of the field). But an account with NO Steam login typed in
+  // must NOT be lumped in with every other blank-login account — each
+  // gets its own private, independent pool keyed by its own id, so its
+  // GC (and RELIC/UFO "done" math) is never affected by other accounts.
+  function gcPoolKey(account){
+    const sg = account.steamGroup ? account.steamGroup.trim() : '';
+    return sg ? sg : ('__solo_' + account.id);
+  }
+  function gcPoolLabel(account){
+    const sg = account.steamGroup ? account.steamGroup.trim() : '';
+    return sg ? sg : ((account.name || 'Unnamed account') + ' (no Steam login — separate)');
+  }
+
   function uid(){ return 'acc_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1042,14 +1057,19 @@
     if(!isDaily && newVal){
       account.ufoInProgress = null;
     }
-    if(isDaily && account.steamGroup){
-      const group = account.steamGroup.trim().toLowerCase();
-      accounts.forEach(a=>{
-        if(a.id!==account.id && a.steamGroup && a.steamGroup.trim().toLowerCase()===group){
-          a.relicDone = newVal;
-        }
-      });
-      setRelicGcDay(account.steamGroup, mostRecentRealEpoch, !!newVal);
+    if(isDaily){
+      if(account.steamGroup){
+        const group = account.steamGroup.trim().toLowerCase();
+        accounts.forEach(a=>{
+          if(a.id!==account.id && a.steamGroup && a.steamGroup.trim().toLowerCase()===group){
+            a.relicDone = newVal;
+          }
+        });
+      }
+      // GC day-marker always keyed by this account's own GC pool (shared
+      // login text, or its own private solo pool if left blank) — never
+      // shared with other blank-login accounts.
+      setRelicGcDay(account, mostRecentRealEpoch, !!newVal);
     }
     await saveAccounts();
     renderAll();
@@ -1075,13 +1095,13 @@
 
     const relicDateSet = new Set();
     accounts.forEach(a=>{
-      if((a.steamGroup ? a.steamGroup.trim() : '')!==key) return;
+      if(gcPoolKey(a)!==key) return;
       (a.relicGcDates||[]).forEach(ts=>{ if(ts>=weeklyEpoch) relicDateSet.add(ts); });
     });
     const relicEvents = Array.from(relicDateSet).map(ts=>({type:'relic', ts, amount:RELIC_GC_PER_DAY}));
 
     const ufoAccounts = accounts.filter(a=>
-      accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key && isAccountDone(a,'ufo')
+      accountTracksUfo(a) && gcPoolKey(a)===key && isAccountDone(a,'ufo')
     );
     const ufoEvents = ufoAccounts.map(a=>({type:'ufo', ts:a.ufoDone||0, amount:GC_PER_UFO, account:a}));
 
@@ -1121,7 +1141,7 @@
   // marking it done right now would earn — full rate while the login still
   // has full-rate slots left this week, half rate forever after that.
   function gcInfoForAccount(account){
-    const key = account.steamGroup ? account.steamGroup.trim() : '';
+    const key = gcPoolKey(account);
     const state = steamGroupCombinedGcState(key);
     const isDone = isAccountDone(account,'ufo');
     let earned = 0, nextAmount = 0, capped = false;
@@ -1152,11 +1172,10 @@
   // Record or remove today's RELIC GC day-marker for every account sharing
   // this Steam login, so relicGroupGcState can count how many distinct days
   // this week the login's RELIC has actually been done.
-  function setRelicGcDay(steamGroup, dayEpoch, on){
-    if(!steamGroup) return;
-    const group = steamGroup.trim().toLowerCase();
+  function setRelicGcDay(account, dayEpoch, on){
+    const poolKey = gcPoolKey(account);
     accounts.forEach(a=>{
-      if(!a.steamGroup || a.steamGroup.trim().toLowerCase()!==group) return;
+      if(gcPoolKey(a)!==poolKey) return;
       if(!Array.isArray(a.relicGcDates)) a.relicGcDates = [];
       if(on){
         if(!a.relicGcDates.includes(dayEpoch)) a.relicGcDates.push(dayEpoch);
@@ -1210,15 +1229,15 @@
     // (new day/week clears a done mark), this flips back to false and the
     // login jumps back to the top on its own.
     function steamGroupFullyDone(key){
-      const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-      const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+      const hasRelic = accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
+      const hasUfo = accounts.some(a=>accountTracksUfo(a) && gcPoolKey(a)===key);
       if(!hasRelic && !hasUfo) return false;
       if(hasRelic){
-        const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
+        const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key && isAccountDone(a,'relic'));
         if(!relicDoneToday) return false;
       }
       if(hasUfo){
-        const anyUfoPending = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key && !isAccountDone(a,'ufo'));
+        const anyUfoPending = accounts.some(a=>accountTracksUfo(a) && gcPoolKey(a)===key && !isAccountDone(a,'ufo'));
         if(anyUfoPending) return false;
       }
       return true;
@@ -1232,16 +1251,18 @@
     // INPROGRESS there's no single server in play, so nothing is restricted.
     const activeServerFilter = (activeTab==='EDY2'||activeTab==='DSCPY2'||activeTab==='INHERIT') ? activeTab : null;
 
-    const gcGroupKeys = Array.from(new Set(
-      accounts
-        .filter(a=>accountTracksUfo(a)||accountTracksRelic(a))
-        .filter(a=> !activeServerFilter || a.server===activeServerFilter)
-        .map(a=> a.steamGroup ? a.steamGroup.trim() : '')
-    )).sort((x,y)=>{
+    const gcKeyLabels = new Map();
+    accounts
+      .filter(a=>accountTracksUfo(a)||accountTracksRelic(a))
+      .filter(a=> !activeServerFilter || a.server===activeServerFilter)
+      .forEach(a=>{
+        const k = gcPoolKey(a);
+        if(!gcKeyLabels.has(k)) gcKeyLabels.set(k, gcPoolLabel(a));
+      });
+    const gcGroupKeys = Array.from(gcKeyLabels.keys()).sort((x,y)=>{
       const xDone = steamGroupFullyDone(x), yDone = steamGroupFullyDone(y);
       if(xDone !== yDone) return xDone ? 1 : -1; // pending logins first, done logins sink down
-      if(!x) return 1; if(!y) return -1;
-      return x.localeCompare(y, undefined, {numeric:true});
+      return gcKeyLabels.get(x).localeCompare(gcKeyLabels.get(y), undefined, {numeric:true});
     });
     if(gcGroupKeys.length){
       const gcCard = document.createElement('div');
@@ -1262,7 +1283,7 @@
           collapsedWrap.innerHTML = `
             <span class="at-gc-collapsed-left">
               <span class="at-gc-check-badge">✓</span>
-              <span class="at-gc-collapsed-name">${key || 'No Steam login'}</span>
+              <span class="at-gc-collapsed-name">${gcKeyLabels.get(key) || 'No Steam login'}</span>
             </span>
             <span class="at-gc-collapsed-done">${state.total.toLocaleString()} GC</span>
           `;
@@ -1277,7 +1298,7 @@
         groupWrap.className = 'at-gc-group' + (fullyDone ? ' done-expanded' : '');
         const nameEl = document.createElement('div');
         nameEl.className = 'at-gc-group-name';
-        nameEl.textContent = key || 'No Steam login';
+        nameEl.textContent = gcKeyLabels.get(key) || 'No Steam login';
         if(fullyDone){
           const collapseBtn = document.createElement('button');
           collapseBtn.className = 'at-gc-collapse-btn';
@@ -1292,8 +1313,8 @@
         }
         groupWrap.appendChild(nameEl);
 
-        const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && (!activeServerFilter || a.server===activeServerFilter));
-        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key && (!activeServerFilter || a.server===activeServerFilter));
+        const hasRelic = accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key && (!activeServerFilter || a.server===activeServerFilter));
+        const hasUfo = accounts.some(a=>accountTracksUfo(a) && gcPoolKey(a)===key && (!activeServerFilter || a.server===activeServerFilter));
         const state = steamGroupCombinedGcState(key);
         const totalPct = Math.min(100, Math.round((state.total/GC_WEEKLY_CAP)*100));
         const totalFull = state.total >= GC_WEEKLY_CAP;
@@ -1310,7 +1331,7 @@
         groupWrap.appendChild(totalRow);
 
         if(hasRelic){
-          const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
+          const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key && isAccountDone(a,'relic'));
           const row = document.createElement('div');
           row.className = 'at-gc-row';
           row.innerHTML = `
@@ -1337,7 +1358,7 @@
             doneBtn.onclick = async ()=>{
               // RELIC is shared per Steam login — any account on this login
               // that tracks RELIC will do, markAccountDone propagates it.
-              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
               if(anyRelicAcc) await markAccountDone(anyRelicAcc, 'relic');
             };
             item.appendChild(tag);
@@ -1357,7 +1378,7 @@
             undoBtn.textContent = 'Undo';
             undoBtn.title = 'Undo today\'s RELIC done mark for this Steam login';
             undoBtn.onclick = async ()=>{
-              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
               if(anyRelicAcc) await markAccountDone(anyRelicAcc, 'relic', {skipCappedConfirm:true});
             };
             item.appendChild(tag);
@@ -1370,7 +1391,7 @@
 
         if(hasUfo){
           const ufoTotal = Object.values(state.ufoEarnedById).reduce((s,v)=>s+v,0);
-          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key && (!activeServerFilter || a.server===activeServerFilter));
+          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && gcPoolKey(a)===key && (!activeServerFilter || a.server===activeServerFilter));
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
           const doneAccs = groupAccounts.filter(a=> isAccountDone(a,'ufo'));
           const row = document.createElement('div');
@@ -1575,7 +1596,7 @@
     const gcBreakdownEl = document.getElementById('hudGcBreakdown');
     if(gcEl){
       const gcKeys = Array.from(new Set(
-        accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
+        accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> gcPoolKey(a))
       ));
       let earned = 0, possible = 0;
       gcKeys.forEach(key=>{
@@ -1677,7 +1698,7 @@
     // after pays half rate. Both readouts below check the same halfRate
     // flag, not independent caps.
     const gc = isDaily ? null : gcInfoForAccount(account);
-    const steamKey = account.steamGroup ? account.steamGroup.trim() : '';
+    const steamKey = gcPoolKey(account);
     const relicGc = isDaily ? relicGroupGcState(steamKey) : null;
     const relicGcCappedToday = !!(relicGc && relicGc.capped && !isDone);
 
@@ -2180,9 +2201,28 @@
       // whose UFO-tracking alt lives on another tab would show no badge here.
       const groupHasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
       const groupHasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-      const gcTag = (groupHasUfo || groupHasRelic)
-        ? (()=>{ const s = steamGroupCombinedGcState(key); return `<span class="at-group-gc${s.total>=GC_WEEKLY_CAP ? ' capped':''}">GC ${s.total.toLocaleString()}/${GC_WEEKLY_CAP.toLocaleString()}</span>`; })()
-        : '';
+      // Named logins (key non-blank) really do share one pool — one call is
+      // correct. The "No Steam login" bucket just visually groups whatever
+      // accounts happen to have no login typed in; those accounts do NOT
+      // share a pool with each other, so sum each one's own separate pool
+      // instead of treating the bucket as a single combined pool.
+      let gcTag = '';
+      if(groupHasUfo || groupHasRelic){
+        if(key){
+          const s = steamGroupCombinedGcState(key);
+          gcTag = `<span class="at-group-gc${s.total>=GC_WEEKLY_CAP ? ' capped':''}">GC ${s.total.toLocaleString()}/${GC_WEEKLY_CAP.toLocaleString()}</span>`;
+        } else {
+          const seenKeys = new Set();
+          let total = 0;
+          list.forEach(a=>{
+            const pk = gcPoolKey(a);
+            if(seenKeys.has(pk)) return;
+            seenKeys.add(pk);
+            total += steamGroupCombinedGcState(pk).total;
+          });
+          gcTag = `<span class="at-group-gc">GC ${total.toLocaleString()} · separate per account</span>`;
+        }
+      }
       headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>${gcTag}`;
       headEl.onclick = ()=>{
         if(collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
@@ -2260,7 +2300,7 @@
           <option value="Steam 9">
           <option value="Steam 10">
         </datalist>
-        <p class="at-hint">Accounts sharing the same Steam login auto-share RELIC completion (UFO stays per-account). Type your own name after "Steam 6" (etc.) to label it — e.g. "Steam 6 - myname". Keep the exact same text on every account that shares that login, or they won't be grouped together.</p>
+        <p class="at-hint">Leave this blank if the account doesn't share a login with anything else — its GC (2,100/UFO run, 2,000/RELIC day) is then completely separate and never affected by other accounts. Only type a Steam login here if this account genuinely shares that login with other accounts on your roster: they'll then auto-share RELIC completion and pool their weekly GC together (UFO still stays per-account). Keep the exact same text on every account that shares that login, or they won't be grouped together.</p>
         <label>Role</label>
         <select class="at-select" id="mRole"></select>
         <p class="at-hint" id="mRoleHint"></p>
@@ -2341,11 +2381,11 @@
     if(isEdit){
       serverSel.value = existing.server;
       backdrop.querySelector('#mName').value = existing.name||'';
-      backdrop.querySelector('#mSteam').value = existing.steamGroup||'Steam 1 - artemis14180';
+      backdrop.querySelector('#mSteam').value = existing.steamGroup||'';
       trackRelicChk.checked = accountTracksRelic(existing);
       trackUfoChk.checked = accountTracksUfo(existing);
     } else {
-      backdrop.querySelector('#mSteam').value = 'Steam 1 - artemis14180';
+      backdrop.querySelector('#mSteam').value = '';
       trackRelicChk.checked = true;
       trackUfoChk.checked = serverSel.value === 'EDY2';
     }
