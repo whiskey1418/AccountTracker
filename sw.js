@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zsammy-tracker-v10';
+const CACHE_NAME = 'zsammy-tracker-v11';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
