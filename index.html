@@ -1209,8 +1209,19 @@
       return true;
     }
 
+    // When a specific server tab is active (EDY2 / DSCP Y2 / Inherit), scope
+    // this card to that server only — the shared-pool totals below still
+    // read from the FULL login (the cap math has to stay correct), but which
+    // logins/rows are shown is restricted so an EDY2 alt doesn't show up
+    // while you're filtered to DSCP Y2, and vice versa. On ALL / PENDING /
+    // INPROGRESS there's no single server in play, so nothing is restricted.
+    const activeServerFilter = (activeTab==='EDY2'||activeTab==='DSCPY2'||activeTab==='INHERIT') ? activeTab : null;
+
     const gcGroupKeys = Array.from(new Set(
-      accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
+      accounts
+        .filter(a=>accountTracksUfo(a)||accountTracksRelic(a))
+        .filter(a=> !activeServerFilter || a.server===activeServerFilter)
+        .map(a=> a.steamGroup ? a.steamGroup.trim() : '')
     )).sort((x,y)=>{
       const xDone = steamGroupFullyDone(x), yDone = steamGroupFullyDone(y);
       if(xDone !== yDone) return xDone ? 1 : -1; // pending logins first, done logins sink down
@@ -1266,8 +1277,8 @@
         }
         groupWrap.appendChild(nameEl);
 
-        const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && (!activeServerFilter || a.server===activeServerFilter));
+        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key && (!activeServerFilter || a.server===activeServerFilter));
         const state = steamGroupCombinedGcState(key);
         const totalPct = Math.min(100, Math.round((state.total/GC_WEEKLY_CAP)*100));
         const totalFull = state.total >= GC_WEEKLY_CAP;
@@ -1344,7 +1355,7 @@
 
         if(hasUfo){
           const ufoTotal = Object.values(state.ufoEarnedById).reduce((s,v)=>s+v,0);
-          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key);
+          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key && (!activeServerFilter || a.server===activeServerFilter));
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
           const doneAccs = groupAccounts.filter(a=> isAccountDone(a,'ufo'));
           const row = document.createElement('div');
