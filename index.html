@@ -592,23 +592,18 @@
   const EL_CAP = 500000; // EDY2 sell limit per account
   const POINTS_CAP = 20000; // DSCP points cap per account
 
-  // UFO GC economy — per observation, a single Steam login only has room for
-  // 5 accounts' worth of full-value UFO GC per week (2,100 GC each) before
-  // the ~10k weekly GC cap on that login kicks in. A 6th account still nets
-  // a partial 1,050 GC; anything past that earns 0 and isn't worth running.
+  // GC economy — a single Steam login has ONE shared 10,000 GC/week cap,
+  // and RELIC and UFO both draw from that same pool (they are NOT separate
+  // 10k caps each). Whichever gets completed first in real time — a RELIC
+  // day on one alt, a UFO run on a completely different alt/server under
+  // the same login — claims the pool first; whatever's left over the rest
+  // of the week still completes normally in-game but earns 0 GC once the
+  // pool's gone. UFO pays 2,100 GC per account when there's room; RELIC
+  // pays 2,000 GC per day (shared across every account on that login,
+  // since it's one daily action) when there's room.
   const GC_PER_UFO = 2100;
-  const GC_PARTIAL_UFO = 1050;
-  const GC_FULL_SLOTS = 5;
-  const GC_WEEKLY_CAP = 10000;
-
-  // RELIC GC economy — RELIC is shared per Steam login (one daily action
-  // covers every account under that login) and pays 2,000 GC/day, but the
-  // same login's weekly GC cap is 10,000, so only the first 5 RELIC days
-  // each week actually earn GC — days 6 and 7 are still doable in-game but
-  // earn 0 GC.
   const RELIC_GC_PER_DAY = 2000;
-  const RELIC_GC_WEEKLY_CAP = 10000;
-  const RELIC_GC_FULL_DAYS = 5;
+  const GC_WEEKLY_CAP = 10000;
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
   const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
   let searchQuery = '';
@@ -963,63 +958,88 @@
     return !!(accountTracksUfo(account) && progTs && progTs >= mostRecentRealEpoch && !isDone);
   }
 
-  // GC state for a Steam login group: which UFO-tracking accounts under it
-  // are already marked done this week (oldest mark first), what each of
-  // those marks was worth, and the running total for the login.
-  function steamGroupUfoState(key){
-    const doneList = accounts.filter(a=>
-      (a.steamGroup ? a.steamGroup.trim() : '')===key && accountTracksUfo(a) && isAccountDone(a,'ufo')
-    ).sort((a,b)=>(a.ufoDone||0)-(b.ufoDone||0));
-    const rankAmount = (idx)=> idx<GC_FULL_SLOTS ? GC_PER_UFO : (idx===GC_FULL_SLOTS ? GC_PARTIAL_UFO : 0);
-    const total = doneList.reduce((sum,a,idx)=>sum+rankAmount(idx),0);
-    return { doneList, rankAmount, total };
-  }
-
-  // GC picture for one account: what it already earned if done, or what
-  // marking it done right now would earn (and whether that's 0 — capped).
-  function gcInfoForAccount(account){
-    const key = account.steamGroup ? account.steamGroup.trim() : '';
-    const state = steamGroupUfoState(key);
-    const isDone = isAccountDone(account,'ufo');
-    let earned = 0, nextAmount = 0, capped = false;
-    if(isDone){
-      const idx = state.doneList.findIndex(a=>a.id===account.id);
-      earned = idx>=0 ? state.rankAmount(idx) : 0;
-    } else {
-      nextAmount = state.rankAmount(state.doneList.length);
-      capped = nextAmount===0;
-    }
-    return { key, doneCount: state.doneList.length, totalGc: state.total, isDone, earned, nextAmount, capped };
-  }
-
-  // RELIC GC state for a Steam login group this week. RELIC completion is
-  // shared across every account under a login, so we track "which days this
-  // week did this login's RELIC get marked done" as a union of relicGcDates
-  // across that login's accounts, then cap the payout at RELIC_GC_FULL_DAYS.
-  function relicGroupGcState(key){
+  // Combined GC state for a Steam login group this week — the single
+  // source of truth for the shared 10k pool. Collects every RELIC day-event
+  // (shared across the login's accounts) and every UFO completion event
+  // (per account) that happened this week, merges them in the order they
+  // actually happened, then walks that timeline crediting each event against
+  // whatever room is left in the shared cap. Whichever action was completed
+  // first — RELIC on one alt, UFO on a totally different alt/server under
+  // the same login — gets priority; anything after the pool empties still
+  // earns 0 GC even though it completes fine in-game.
+  function steamGroupCombinedGcState(key){
     const shiftedNow = nowShifted();
     const weeklyMR = mostRecentWeeklyReset(shiftedNow);
     const weeklyEpoch = shiftedToRealEpoch(weeklyMR);
-    const dateSet = new Set();
+
+    const relicDateSet = new Set();
     accounts.forEach(a=>{
       if((a.steamGroup ? a.steamGroup.trim() : '')!==key) return;
-      (a.relicGcDates||[]).forEach(ts=>{ if(ts>=weeklyEpoch) dateSet.add(ts); });
+      (a.relicGcDates||[]).forEach(ts=>{ if(ts>=weeklyEpoch) relicDateSet.add(ts); });
     });
-    const sortedDates = Array.from(dateSet).sort((a,b)=>a-b);
-    const daysDone = sortedDates.length;
-    const total = Math.min(daysDone, RELIC_GC_FULL_DAYS) * RELIC_GC_PER_DAY;
-    const capped = daysDone >= RELIC_GC_FULL_DAYS;
-    return { daysDone, total, capped, sortedDates };
+    const relicEvents = Array.from(relicDateSet).map(ts=>({type:'relic', ts, amount:RELIC_GC_PER_DAY}));
+
+    const ufoAccounts = accounts.filter(a=>
+      accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key && isAccountDone(a,'ufo')
+    );
+    const ufoEvents = ufoAccounts.map(a=>({type:'ufo', ts:a.ufoDone||0, amount:GC_PER_UFO, account:a}));
+
+    const events = relicEvents.concat(ufoEvents).sort((x,y)=>x.ts-y.ts);
+
+    let running = 0;
+    let relicEarned = 0;
+    const relicEarnedByDate = {};
+    const ufoEarnedById = {};
+    events.forEach(e=>{
+      const room = Math.max(0, GC_WEEKLY_CAP - running);
+      const earned = Math.min(e.amount, room);
+      running += earned;
+      if(e.type==='relic'){ relicEarned += earned; relicEarnedByDate[e.ts] = earned; }
+      else ufoEarnedById[e.account.id] = earned;
+    });
+
+    return {
+      total: running,
+      capped: running >= GC_WEEKLY_CAP,
+      remaining: Math.max(0, GC_WEEKLY_CAP - running),
+      relicEarned,
+      relicEarnedByDate,
+      relicDaysDone: relicEvents.length,
+      ufoEarnedById,
+      ufoDoneCount: ufoEvents.length
+    };
   }
 
-  // How much GC a specific day's RELIC completion is worth for a login —
-  // depends on that day's rank among this week's completed days (oldest
-  // first), since only the first RELIC_GC_FULL_DAYS days pay out.
+  // GC picture for one UFO account: what it already earned if done, or what
+  // marking it done right now would earn against the login's shared
+  // remaining room (and whether that's 0 — pool's already gone).
+  function gcInfoForAccount(account){
+    const key = account.steamGroup ? account.steamGroup.trim() : '';
+    const state = steamGroupCombinedGcState(key);
+    const isDone = isAccountDone(account,'ufo');
+    let earned = 0, nextAmount = 0, capped = false;
+    if(isDone){
+      earned = state.ufoEarnedById[account.id] || 0;
+    } else {
+      nextAmount = Math.min(GC_PER_UFO, state.remaining);
+      capped = nextAmount===0;
+    }
+    return { key, totalGc: state.total, isDone, earned, nextAmount, capped, state };
+  }
+
+  // RELIC-only view into the combined state, for the pieces of the UI that
+  // just need the RELIC side (days done / RELIC's share of the pool /
+  // whether the shared pool is fully gone).
+  function relicGroupGcState(key){
+    const state = steamGroupCombinedGcState(key);
+    return { daysDone: state.relicDaysDone, total: state.relicEarned, capped: state.remaining<=0, state };
+  }
+
+  // How much GC a specific day's RELIC completion actually earned for a
+  // login, from the combined timeline.
   function relicDayGcAmount(key, dayEpoch){
-    const state = relicGroupGcState(key);
-    const idx = state.sortedDates.indexOf(dayEpoch);
-    if(idx<0) return 0;
-    return idx < RELIC_GC_FULL_DAYS ? RELIC_GC_PER_DAY : 0;
+    const state = steamGroupCombinedGcState(key);
+    return state.relicEarnedByDate[dayEpoch] || 0;
   }
 
   // Record or remove today's RELIC GC day-marker for every account sharing
@@ -1065,16 +1085,16 @@
       wrap.appendChild(card);
     });
 
-    // GC-by-Steam-login summary — one card per login that tracks RELIC and/or
-    // UFO, each with its own bar against its own independent weekly 10k GC
-    // cap, so it's obvious at a glance which logins still have room without
-    // scrolling into the account grid.
+    // GC-by-Steam-login summary — one card per login, ONE bar against that
+    // login's single shared 10k weekly GC pool (RELIC and UFO both draw
+    // from it together, they don't get independent caps), with RELIC/UFO
+    // sub-lines showing how that pool is currently split between them.
     // NOTE: this card intentionally reads from the FULL `accounts` list, not
-    // the tab-filtered `filtered` list. A Steam login's RELIC and UFO totals
-    // are a login-wide fact (e.g. UFO only runs on an EDY2 alt, RELIC only on
-    // a DSCP alt of the same login) — if we scoped this to the active tab,
-    // switching tabs would silently hide a row (and its already-earned GC)
-    // just because the account that earns it isn't on the current tab.
+    // the tab-filtered `filtered` list. A Steam login's pool is a login-wide
+    // fact (e.g. UFO only runs on an EDY2 alt, RELIC only on a DSCP alt of
+    // the same login) — if we scoped this to the active tab, switching tabs
+    // would silently hide GC that's already been earned by an account that
+    // isn't on the current tab.
     const gcGroupKeys = Array.from(new Set(
       accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
     )).sort((x,y)=>{
@@ -1097,23 +1117,35 @@
         groupWrap.appendChild(nameEl);
 
         const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const state = steamGroupCombinedGcState(key);
+        const totalPct = Math.min(100, Math.round((state.total/GC_WEEKLY_CAP)*100));
+        const totalFull = state.total >= GC_WEEKLY_CAP;
+
+        const totalRow = document.createElement('div');
+        totalRow.className = 'at-gc-row' + (totalFull ? ' full' : '');
+        totalRow.innerHTML = `
+          <div class="at-gc-row-head">
+            <span class="at-gc-row-name total">Total (shared pool)</span>
+            <span class="at-gc-row-count total">${state.total.toLocaleString()} / ${GC_WEEKLY_CAP.toLocaleString()}</span>
+          </div>
+          <div class="at-progress-bar small"><div class="at-progress-fill${totalFull?' full':''}" style="width:${totalPct}%"></div></div>
+        `;
+        groupWrap.appendChild(totalRow);
+
         if(hasRelic){
-          const rState = relicGroupGcState(key);
-          const rPct = Math.min(100, Math.round((rState.total/RELIC_GC_WEEKLY_CAP)*100));
-          const rFull = rState.total >= RELIC_GC_WEEKLY_CAP;
           const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
           const row = document.createElement('div');
-          row.className = 'at-gc-row' + (rFull ? ' full' : '');
+          row.className = 'at-gc-row';
           row.innerHTML = `
             <div class="at-gc-row-head">
               <span class="at-gc-row-name">RELIC</span>
-              <span class="at-gc-row-count">${rState.total.toLocaleString()} / ${RELIC_GC_WEEKLY_CAP.toLocaleString()}</span>
+              <span class="at-gc-row-count">${state.relicEarned.toLocaleString()} GC this week</span>
             </div>
-            <div class="at-progress-bar small"><div class="at-progress-fill${rFull?' full':''}" style="width:${rPct}%"></div></div>
           `;
           if(!relicDoneToday){
-            const todayAmount = rState.capped ? 0 : RELIC_GC_PER_DAY;
-            const tagClass = todayAmount===0 ? 'capped' : '';
+            const todayAmount = Math.min(RELIC_GC_PER_DAY, state.remaining);
+            const tagClass = todayAmount===0 ? 'capped' : (todayAmount<RELIC_GC_PER_DAY ? 'partial' : '');
             const tagText = todayAmount===0 ? 'not worth it today' : (todayAmount.toLocaleString()+' GC today');
             const pendWrap = document.createElement('div');
             pendWrap.className = 'at-gc-pending';
@@ -1123,28 +1155,24 @@
           groupWrap.appendChild(row);
         }
 
-        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
         if(hasUfo){
-          const state = steamGroupUfoState(key);
-          const pct = Math.min(100, Math.round((state.total/GC_WEEKLY_CAP)*100));
-          const isFull = state.total >= GC_WEEKLY_CAP;
+          const ufoTotal = Object.values(state.ufoEarnedById).reduce((s,v)=>s+v,0);
           const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key);
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
           const row = document.createElement('div');
-          row.className = 'at-gc-row' + (isFull ? ' full' : '');
+          row.className = 'at-gc-row';
           row.innerHTML = `
             <div class="at-gc-row-head">
               <span class="at-gc-row-name">UFO</span>
-              <span class="at-gc-row-count">${state.total.toLocaleString()} / ${GC_WEEKLY_CAP.toLocaleString()}</span>
+              <span class="at-gc-row-count">${ufoTotal.toLocaleString()} GC this week</span>
             </div>
-            <div class="at-progress-bar small"><div class="at-progress-fill${isFull?' full':''}" style="width:${pct}%"></div></div>
           `;
           if(pending.length){
             const pendWrap = document.createElement('div');
             pendWrap.className = 'at-gc-pending';
             pendWrap.innerHTML = pending.map(a=>{
               const info = gcInfoForAccount(a);
-              const tagClass = info.capped ? 'capped' : (info.nextAmount===GC_PARTIAL_UFO ? 'partial' : '');
+              const tagClass = info.capped ? 'capped' : (info.nextAmount>0 && info.nextAmount<GC_PER_UFO ? 'partial' : '');
               const tagText = info.capped ? 'not worth it' : (info.nextAmount.toLocaleString()+' GC');
               const label = a.name || 'Unnamed account';
               return `<span class="at-gc-pending-tag ${tagClass}">${label} <b>${tagText}</b></span>`;
@@ -1292,7 +1320,8 @@
     }
 
     // Total GC earned this week vs. the max possible if every Steam login's
-    // RELIC and UFO both get fully cleared (their independent 10k caps).
+    // shared 10k pool gets fully cleared (RELIC + UFO together, one pool
+    // per login — not two independent caps).
     const gcEl = document.getElementById('hudGc');
     const gcBreakdownEl = document.getElementById('hudGcBreakdown');
     if(gcEl){
@@ -1301,10 +1330,8 @@
       ));
       let earned = 0, possible = 0;
       gcKeys.forEach(key=>{
-        const hasR = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-        const hasU = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-        if(hasR){ earned += relicGroupGcState(key).total; possible += RELIC_GC_WEEKLY_CAP; }
-        if(hasU){ earned += steamGroupUfoState(key).total; possible += GC_WEEKLY_CAP; }
+        earned += steamGroupCombinedGcState(key).total;
+        possible += GC_WEEKLY_CAP;
       });
       gcEl.textContent = earned.toLocaleString() + ' / ' + possible.toLocaleString();
       if(gcBreakdownEl) gcBreakdownEl.textContent = gcKeys.length + ' login' + (gcKeys.length===1?'':'s') + ' tracked';
@@ -1386,8 +1413,9 @@
     const progTs = account.ufoInProgress;
     const isInProgress = !isDaily && progTs && progTs >= mostRecentRealEpoch && !isDone;
 
-    // GC readout — UFO uses the account's Steam login weekly cap; RELIC uses
-    // the shared per-login daily cap (both independent 10k/week caps).
+    // GC readout — RELIC and UFO on this account's Steam login share ONE
+    // 10k/week pool, so both readouts below are checked against the same
+    // remaining-room figure, not independent caps.
     const gc = isDaily ? null : gcInfoForAccount(account);
     const steamKey = account.steamGroup ? account.steamGroup.trim() : '';
     const relicGc = isDaily ? relicGroupGcState(steamKey) : null;
@@ -1408,18 +1436,19 @@
 
     if(gc){
       const gcLine = document.createElement('div'); gcLine.className='at-tracker-gc';
+      const partial = gc.earned>0 && gc.earned<GC_PER_UFO;
       if(isDone){
         gcLine.textContent = gc.earned>0
-          ? gc.earned.toLocaleString() + ' GC noted' + (gc.earned===GC_PARTIAL_UFO ? ' (partial)' : '')
-          : 'Marked · 0 GC (login was already capped)';
-        if(gc.earned===GC_PARTIAL_UFO) gcLine.classList.add('partial');
+          ? gc.earned.toLocaleString() + ' GC noted' + (partial ? ' (partial)' : '')
+          : 'Marked · 0 GC (login pool was already used up)';
+        if(partial) gcLine.classList.add('partial');
         if(gc.earned===0) gcLine.classList.add('capped');
       } else if(gc.capped){
-        gcLine.textContent = 'Steam login GC cap reached this week';
+        gcLine.textContent = 'Steam login GC pool used up this week';
         gcLine.classList.add('capped');
       } else {
-        gcLine.textContent = gc.nextAmount.toLocaleString() + ' GC if marked now · ' + gc.doneCount + '/' + GC_FULL_SLOTS + ' full slots used';
-        if(gc.nextAmount===GC_PARTIAL_UFO) gcLine.classList.add('partial');
+        gcLine.textContent = gc.nextAmount.toLocaleString() + ' GC if marked now · ' + gc.totalGc.toLocaleString() + '/' + GC_WEEKLY_CAP.toLocaleString() + ' login pool used';
+        if(gc.nextAmount<GC_PER_UFO) gcLine.classList.add('partial');
       }
       labelWrap.appendChild(gcLine);
     }
@@ -1430,13 +1459,15 @@
         const earnedToday = relicDayGcAmount(steamKey, mostRecentRealEpoch);
         gcLine.textContent = earnedToday>0
           ? earnedToday.toLocaleString() + ' GC noted today'
-          : 'Marked · 0 GC (login already capped this week)';
+          : 'Marked · 0 GC (login pool already used up this week)';
         if(earnedToday===0) gcLine.classList.add('capped');
       } else if(relicGc.capped){
-        gcLine.textContent = 'Steam login GC cap reached this week (0 GC today)';
+        gcLine.textContent = 'Steam login GC pool used up this week (0 GC today)';
         gcLine.classList.add('capped');
       } else {
-        gcLine.textContent = RELIC_GC_PER_DAY.toLocaleString() + ' GC if marked now · ' + relicGc.daysDone + '/' + RELIC_GC_FULL_DAYS + ' days used (' + relicGc.total.toLocaleString() + '/' + RELIC_GC_WEEKLY_CAP.toLocaleString() + ')';
+        const relicNext = Math.min(RELIC_GC_PER_DAY, relicGc.state.remaining);
+        gcLine.textContent = relicNext.toLocaleString() + ' GC if marked now · ' + relicGc.total.toLocaleString() + '/' + GC_WEEKLY_CAP.toLocaleString() + ' login pool used';
+        if(relicNext<RELIC_GC_PER_DAY) gcLine.classList.add('partial');
       }
       labelWrap.appendChild(gcLine);
     }
@@ -1466,23 +1497,22 @@
       check.textContent = 'Done ✓';
     } else if(isDaily && relicGc && relicGc.capped){
       check.textContent = 'Mark done (0 GC)';
-      check.title = 'This Steam login already hit its weekly RELIC GC cap — today\'s RELIC still resets normally but won\'t add GC.';
+      check.title = 'This Steam login\'s shared weekly GC pool is already used up (by RELIC and/or UFO on this login) — today\'s RELIC still resets normally but won\'t add GC.';
     } else if(isDaily && relicGc){
-      check.textContent = 'Mark done (' + RELIC_GC_PER_DAY.toLocaleString() + ' GC)';
+      const relicNext = Math.min(RELIC_GC_PER_DAY, relicGc.state.remaining);
+      check.textContent = 'Mark done (' + relicNext.toLocaleString() + ' GC)';
     } else if(gc && gc.capped){
       check.textContent = 'Not worth it';
-      check.title = 'This Steam login already hit its weekly GC cap — running UFO here now would earn 0 GC. Tap to log it anyway if you ran it regardless.';
-    } else if(gc && gc.nextAmount===GC_PARTIAL_UFO){
-      check.textContent = 'Mark done (1,050 GC)';
+      check.title = 'This Steam login\'s shared weekly GC pool is already used up (by RELIC and/or UFO on this login) — running UFO here now would earn 0 GC. Tap to log it anyway if you ran it regardless.';
     } else if(gc){
-      check.textContent = 'Mark done (2,100 GC)';
+      check.textContent = 'Mark done (' + gc.nextAmount.toLocaleString() + ' GC)';
     } else {
       check.textContent = 'Mark done';
     }
     check.onclick = async ()=>{
       const newVal = isDone ? null : Date.now();
       if(gc && gc.capped && !isDone){
-        const ok = await showConfirm('This Steam login\'s weekly GC cap is already hit — this account would earn 0 GC. Mark it done anyway?', 'Mark anyway');
+        const ok = await showConfirm('This Steam login\'s shared weekly GC pool is already used up — this account would earn 0 GC. Mark it done anyway?', 'Mark anyway');
         if(!ok) return;
       }
       account[doneField] = newVal;
@@ -1918,17 +1948,15 @@
       section.className = 'at-group';
       const headEl = document.createElement('div');
       headEl.className = 'at-group-head' + (isCollapsed ? ' collapsed' : '');
-      const groupHasUfo = list.some(accountTracksUfo);
-      const groupHasRelic = list.some(accountTracksRelic);
-      const ufoGcState = groupHasUfo ? steamGroupUfoState(key) : null;
-      const relicGcState = groupHasRelic ? relicGroupGcState(key) : null;
-      const ufoTag = ufoGcState
-        ? `<span class="at-group-gc ufo${ufoGcState.total>=GC_WEEKLY_CAP ? ' capped':''}">UFO ${ufoGcState.total.toLocaleString()}/${GC_WEEKLY_CAP.toLocaleString()}</span>`
+      // Whether this login tracks RELIC/UFO at all is a login-wide fact, so
+      // check the full roster, not just this tab's slice — otherwise a login
+      // whose UFO-tracking alt lives on another tab would show no badge here.
+      const groupHasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+      const groupHasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+      const gcTag = (groupHasUfo || groupHasRelic)
+        ? (()=>{ const s = steamGroupCombinedGcState(key); return `<span class="at-group-gc${s.total>=GC_WEEKLY_CAP ? ' capped':''}">GC ${s.total.toLocaleString()}/${GC_WEEKLY_CAP.toLocaleString()}</span>`; })()
         : '';
-      const relicTag = relicGcState
-        ? `<span class="at-group-gc relic${relicGcState.total>=RELIC_GC_WEEKLY_CAP ? ' capped':''}">RELIC ${relicGcState.total.toLocaleString()}/${RELIC_GC_WEEKLY_CAP.toLocaleString()}</span>`
-        : '';
-      headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>${relicTag}${ufoTag}`;
+      headEl.innerHTML = `<span class="at-group-chevron">▾</span><span>${key || 'No Steam login'}</span><span class="at-group-count">${list.length} account${list.length===1?'':'s'}</span>${gcTag}`;
       headEl.onclick = ()=>{
         if(collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
         renderGrid();
