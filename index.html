@@ -423,6 +423,18 @@
   .at-gc-pending-tag.partial b{color:var(--warn);}
   .at-gc-pending-tag.capped{border-color:rgba(255,107,110,0.35);}
   .at-gc-pending-tag.capped b{color:var(--danger);}
+  .at-gc-pending-tag.done-tag{border-color:var(--accent-dim); background:var(--accent-soft); color:var(--accent);}
+  .at-gc-pending-item{display:inline-flex; align-items:center; gap:4px;}
+  .at-gc-done-btn{
+    font-family:var(--font-body); font-size:10px; font-weight:700; letter-spacing:.2px;
+    color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-dim);
+    border-radius:999px; padding:3px 9px; cursor:pointer; transition:.15s ease;
+  }
+  .at-gc-done-btn:hover{background:var(--accent-dim); color:var(--text); transform:translateY(-1px);}
+  .at-gc-done-btn.undo{
+    color:var(--muted); background:var(--surface3); border-color:var(--line);
+  }
+  .at-gc-done-btn.undo:hover{border-color:var(--danger); color:var(--danger); background:var(--surface3);}
   .at-progress-bar.small{height:4px;}
   .at-progress-fill.full{background:linear-gradient(90deg, var(--danger), var(--warn));}
 
@@ -958,6 +970,46 @@
     return !!(accountTracksUfo(account) && progTs && progTs >= mostRecentRealEpoch && !isDone);
   }
 
+  // Shared "mark done / undo" logic for a RELIC (daily) or UFO (weekly)
+  // quest on one account. Pulled out of the account-card tracker so the
+  // GC-by-Steam-login summary can offer the same Done buttons inline,
+  // without duplicating the propagation/GC-marker rules. Resolves to true
+  // once the save + re-render has happened, or false if a capped-pool
+  // confirm was shown and declined (nothing changed).
+  async function markAccountDone(account, type, opts){
+    opts = opts || {};
+    const isDaily = type==='relic';
+    const shiftedNow = nowShifted();
+    const mostRecentShifted = isDaily ? mostRecentDailyReset(shiftedNow) : mostRecentWeeklyReset(shiftedNow);
+    const mostRecentRealEpoch = shiftedToRealEpoch(mostRecentShifted);
+    const doneField = isDaily ? 'relicDone' : 'ufoDone';
+    const isDone = isAccountDone(account, type);
+    const newVal = isDone ? null : Date.now();
+    if(!isDaily && !isDone && !opts.skipCappedConfirm){
+      const gc = gcInfoForAccount(account);
+      if(gc && gc.capped){
+        const ok = await showConfirm('This Steam login\'s shared weekly GC pool is already used up — this account would earn 0 GC. Mark it done anyway?', 'Mark anyway');
+        if(!ok) return false;
+      }
+    }
+    account[doneField] = newVal;
+    if(!isDaily && newVal){
+      account.ufoInProgress = null;
+    }
+    if(isDaily && account.steamGroup){
+      const group = account.steamGroup.trim().toLowerCase();
+      accounts.forEach(a=>{
+        if(a.id!==account.id && a.steamGroup && a.steamGroup.trim().toLowerCase()===group){
+          a.relicDone = newVal;
+        }
+      });
+      setRelicGcDay(account.steamGroup, mostRecentRealEpoch, !!newVal);
+    }
+    await saveAccounts();
+    renderAll();
+    return true;
+  }
+
   // Combined GC state for a Steam login group this week — the single
   // source of truth for the shared 10k pool. Collects every RELIC day-event
   // (shared across the login's accounts) and every UFO completion event
@@ -1149,8 +1201,45 @@
             const tagText = todayAmount===0 ? 'not worth it today' : (todayAmount.toLocaleString()+' GC today');
             const pendWrap = document.createElement('div');
             pendWrap.className = 'at-gc-pending';
-            pendWrap.innerHTML = `<span class="at-gc-pending-tag ${tagClass}">Today <b>${tagText}</b></span>`;
+            const item = document.createElement('div');
+            item.className = 'at-gc-pending-item';
+            const tag = document.createElement('span');
+            tag.className = 'at-gc-pending-tag ' + tagClass;
+            tag.innerHTML = `Today <b>${tagText}</b>`;
+            const doneBtn = document.createElement('button');
+            doneBtn.className = 'at-gc-done-btn';
+            doneBtn.textContent = 'Done';
+            doneBtn.title = 'Mark today\'s RELIC done for this Steam login';
+            doneBtn.onclick = async ()=>{
+              // RELIC is shared per Steam login — any account on this login
+              // that tracks RELIC will do, markAccountDone propagates it.
+              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+              if(anyRelicAcc) await markAccountDone(anyRelicAcc, 'relic');
+            };
+            item.appendChild(tag);
+            item.appendChild(doneBtn);
+            pendWrap.appendChild(item);
             row.appendChild(pendWrap);
+          } else {
+            const doneWrap = document.createElement('div');
+            doneWrap.className = 'at-gc-pending';
+            const item = document.createElement('div');
+            item.className = 'at-gc-pending-item';
+            const tag = document.createElement('span');
+            tag.className = 'at-gc-pending-tag done-tag';
+            tag.textContent = 'RELIC done today ✓';
+            const undoBtn = document.createElement('button');
+            undoBtn.className = 'at-gc-done-btn undo';
+            undoBtn.textContent = 'Undo';
+            undoBtn.title = 'Undo today\'s RELIC done mark for this Steam login';
+            undoBtn.onclick = async ()=>{
+              const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+              if(anyRelicAcc) await markAccountDone(anyRelicAcc, 'relic', {skipCappedConfirm:true});
+            };
+            item.appendChild(tag);
+            item.appendChild(undoBtn);
+            doneWrap.appendChild(item);
+            row.appendChild(doneWrap);
           }
           groupWrap.appendChild(row);
         }
@@ -1159,6 +1248,7 @@
           const ufoTotal = Object.values(state.ufoEarnedById).reduce((s,v)=>s+v,0);
           const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key);
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
+          const doneAccs = groupAccounts.filter(a=> isAccountDone(a,'ufo'));
           const row = document.createElement('div');
           row.className = 'at-gc-row';
           row.innerHTML = `
@@ -1170,14 +1260,47 @@
           if(pending.length){
             const pendWrap = document.createElement('div');
             pendWrap.className = 'at-gc-pending';
-            pendWrap.innerHTML = pending.map(a=>{
+            pending.forEach(a=>{
               const info = gcInfoForAccount(a);
               const tagClass = info.capped ? 'capped' : (info.nextAmount>0 && info.nextAmount<GC_PER_UFO ? 'partial' : '');
               const tagText = info.capped ? 'not worth it' : (info.nextAmount.toLocaleString()+' GC');
               const label = a.name || 'Unnamed account';
-              return `<span class="at-gc-pending-tag ${tagClass}">${label} <b>${tagText}</b></span>`;
-            }).join('');
+              const item = document.createElement('div');
+              item.className = 'at-gc-pending-item';
+              const tag = document.createElement('span');
+              tag.className = 'at-gc-pending-tag ' + tagClass;
+              tag.innerHTML = `${label} <b>${tagText}</b>`;
+              const doneBtn = document.createElement('button');
+              doneBtn.className = 'at-gc-done-btn';
+              doneBtn.textContent = 'Done';
+              doneBtn.title = 'Mark this account\'s UFO done for this week';
+              doneBtn.onclick = async ()=>{ await markAccountDone(a, 'ufo'); };
+              item.appendChild(tag);
+              item.appendChild(doneBtn);
+              pendWrap.appendChild(item);
+            });
             row.appendChild(pendWrap);
+          }
+          if(doneAccs.length){
+            const doneWrap = document.createElement('div');
+            doneWrap.className = 'at-gc-pending';
+            doneAccs.forEach(a=>{
+              const label = a.name || 'Unnamed account';
+              const item = document.createElement('div');
+              item.className = 'at-gc-pending-item';
+              const tag = document.createElement('span');
+              tag.className = 'at-gc-pending-tag done-tag';
+              tag.innerHTML = `${label} <b>done ✓</b>`;
+              const undoBtn = document.createElement('button');
+              undoBtn.className = 'at-gc-done-btn undo';
+              undoBtn.textContent = 'Undo';
+              undoBtn.title = 'Undo this account\'s UFO done mark for this week';
+              undoBtn.onclick = async ()=>{ await markAccountDone(a, 'ufo', {skipCappedConfirm:true}); };
+              item.appendChild(tag);
+              item.appendChild(undoBtn);
+              doneWrap.appendChild(item);
+            });
+            row.appendChild(doneWrap);
           }
           groupWrap.appendChild(row);
         }
@@ -1510,35 +1633,7 @@
       check.textContent = 'Mark done';
     }
     check.onclick = async ()=>{
-      const newVal = isDone ? null : Date.now();
-      if(gc && gc.capped && !isDone){
-        const ok = await showConfirm('This Steam login\'s shared weekly GC pool is already used up — this account would earn 0 GC. Mark it done anyway?', 'Mark anyway');
-        if(!ok) return;
-      }
-      account[doneField] = newVal;
-      // Marking the weekly UFO done clears its in-progress flag too.
-      if(!isDaily && newVal){
-        account.ufoInProgress = null;
-      }
-      // RELIC is shared per Steam login: toggling it on one account toggles it
-      // on every other account under the same Steam login too. UFO is per-account,
-      // so it's never propagated.
-      if(isDaily && account.steamGroup){
-        const group = account.steamGroup.trim().toLowerCase();
-        accounts.forEach(a=>{
-          if(a.id!==account.id && a.steamGroup && a.steamGroup.trim().toLowerCase()===group){
-            a.relicDone = newVal;
-          }
-        });
-      }
-      // Record (or remove) today's RELIC GC day-marker for the whole login,
-      // so relicGroupGcState can tell how many of this week's RELIC days
-      // actually earned GC.
-      if(isDaily && account.steamGroup){
-        setRelicGcDay(account.steamGroup, mostRecentRealEpoch, !!newVal);
-      }
-      await saveAccounts();
-      renderAll();
+      await markAccountDone(account, type);
     };
 
     if(progressBtn) btnRow.appendChild(progressBtn);
