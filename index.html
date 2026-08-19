@@ -157,6 +157,10 @@
   }
   .at-tab.inprogress-tab{ margin-left:auto; }
   .at-tab.inprogress-tab .inprogress-tag{ background:var(--signal); box-shadow:0 0 6px var(--signal); }
+  .at-tab.pending-tab .pending-tag{ background:var(--warn); box-shadow:0 0 6px var(--warn); }
+  .at-tab.pending-tab.active{
+    border-color:rgba(255,180,84,0.4); background:rgba(255,180,84,0.12); color:var(--warn);
+  }
   .at-tab.inprogress-tab.active{
     background:var(--signal-dim); color:var(--signal); border-color:var(--signal);
     box-shadow:0 0 0 1px var(--signal) inset;
@@ -520,6 +524,11 @@
         <span class="at-hud-label" id="hudRelicLabel">Relic · time to open</span>
         <span class="at-hud-value" id="hudRelic">--</span>
         <span class="at-hud-breakdown">Openable window incl. grace, est.</span>
+      </div>
+      <div class="at-hud-chip" id="hudGcChip">
+        <span class="at-hud-label">GC earned this week</span>
+        <span class="at-hud-value" id="hudGc">--</span>
+        <span class="at-hud-breakdown" id="hudGcBreakdown"></span>
       </div>
       <div class="at-hud-chip">
         <span class="at-hud-label">Roster</span>
@@ -1071,29 +1080,6 @@
       gcCard.className = 'at-progress-card';
       gcCard.innerHTML = `<div class="at-progress-head"><span class="at-progress-title">GC by Steam login · this week</span></div>`;
 
-      // Weekly total: what's earned so far vs. the max possible if every
-      // login is fully cleared (RELIC cap + UFO cap for every login that
-      // tracks each).
-      let earnedTotal = 0, possibleTotal = 0;
-      gcGroupKeys.forEach(key=>{
-        const hasR = filtered.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-        const hasU = filtered.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
-        if(hasR){ earnedTotal += relicGroupGcState(key).total; possibleTotal += RELIC_GC_WEEKLY_CAP; }
-        if(hasU){ earnedTotal += steamGroupUfoState(key).total; possibleTotal += GC_WEEKLY_CAP; }
-      });
-      const totalPct = possibleTotal ? Math.min(100, Math.round((earnedTotal/possibleTotal)*100)) : 0;
-      const totalBlock = document.createElement('div');
-      totalBlock.className = 'at-gc-total';
-      totalBlock.innerHTML = `
-        <div class="at-gc-row-head">
-          <span class="at-gc-row-name total">All logins combined</span>
-          <span class="at-gc-row-count total">${earnedTotal.toLocaleString()} / ${possibleTotal.toLocaleString()}</span>
-        </div>
-        <div class="at-progress-bar"><div class="at-progress-fill" style="width:${totalPct}%"></div></div>
-        <p class="at-hint">${(possibleTotal-earnedTotal).toLocaleString()} GC left to earn this week if every account and login gets fully cleared</p>
-      `;
-      gcCard.appendChild(totalBlock);
-
       const rowsWrap = document.createElement('div');
       rowsWrap.className = 'at-gc-summary';
       gcGroupKeys.forEach(key=>{
@@ -1298,15 +1284,41 @@
         ' <span class="at-hud-sep">·</span> '+serverDot('DSCPY2')+'DS '+c.DSCPY2+
         ' <span class="at-hud-sep">·</span> '+serverDot('INHERIT')+'IN '+c.INHERIT;
     }
+
+    // Total GC earned this week vs. the max possible if every Steam login's
+    // RELIC and UFO both get fully cleared (their independent 10k caps).
+    const gcEl = document.getElementById('hudGc');
+    const gcBreakdownEl = document.getElementById('hudGcBreakdown');
+    if(gcEl){
+      const gcKeys = Array.from(new Set(
+        accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
+      ));
+      let earned = 0, possible = 0;
+      gcKeys.forEach(key=>{
+        const hasR = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const hasU = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        if(hasR){ earned += relicGroupGcState(key).total; possible += RELIC_GC_WEEKLY_CAP; }
+        if(hasU){ earned += steamGroupUfoState(key).total; possible += GC_WEEKLY_CAP; }
+      });
+      gcEl.textContent = earned.toLocaleString() + ' / ' + possible.toLocaleString();
+      if(gcBreakdownEl) gcBreakdownEl.textContent = gcKeys.length + ' login' + (gcKeys.length===1?'':'s') + ' tracked';
+    }
   }
 
   // ---------- Rendering ----------
   // Returns the accounts belonging to whichever tab is currently selected.
   // 'INPROGRESS' is a special pseudo-tab (not a server) that shows every
   // account with a live UFO in-progress flag, regardless of which server
-  // it's on, so those runs are easy to find in one place.
+  // it's on, so those runs are easy to find in one place. 'PENDING' shows
+  // every account still owing a RELIC (today) or UFO (this week) quest.
+  function isAccountPending(account){
+    const relicPending = accountTracksRelic(account) && !isAccountDone(account,'relic');
+    const ufoPending = accountTracksUfo(account) && !isAccountDone(account,'ufo');
+    return relicPending || ufoPending;
+  }
   function getTabFiltered(list){
     if(activeTab==='INPROGRESS') return list.filter(isAccountInProgress);
+    if(activeTab==='PENDING') return list.filter(isAccountPending);
     return activeTab==='ALL' ? list : list.filter(a=>a.server===activeTab);
   }
 
@@ -1322,6 +1334,13 @@
       btn.onclick = ()=>{ activeTab = s.id; renderAll(); };
       wrap.appendChild(btn);
     });
+
+    const pendingCount = accounts.filter(isAccountPending).length;
+    const pendingBtn = document.createElement('button');
+    pendingBtn.className = 'at-tab pending-tab' + (activeTab==='PENDING' ? ' active' : '');
+    pendingBtn.innerHTML = '<span class="at-dot-tag pending-tag"></span>Pending · ' + pendingCount;
+    pendingBtn.onclick = ()=>{ activeTab = 'PENDING'; renderAll(); };
+    wrap.appendChild(pendingBtn);
 
     const inProgCount = accounts.filter(isAccountInProgress).length;
     const progBtn = document.createElement('button');
@@ -1867,7 +1886,9 @@
         ? 'No accounts match "' + searchQuery + '".'
         : (activeTab==='INPROGRESS'
             ? 'No UFO runs marked in progress right now.'
-            : 'No accounts here yet. Add one to start tracking resets.');
+            : (activeTab==='PENDING'
+                ? 'Nothing pending — every account is caught up on RELIC and UFO.'
+                : 'No accounts here yet. Add one to start tracking resets.'));
       grid.appendChild(empty);
       return;
     }
