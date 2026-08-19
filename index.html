@@ -1069,8 +1069,14 @@
     // UFO, each with its own bar against its own independent weekly 10k GC
     // cap, so it's obvious at a glance which logins still have room without
     // scrolling into the account grid.
+    // NOTE: this card intentionally reads from the FULL `accounts` list, not
+    // the tab-filtered `filtered` list. A Steam login's RELIC and UFO totals
+    // are a login-wide fact (e.g. UFO only runs on an EDY2 alt, RELIC only on
+    // a DSCP alt of the same login) — if we scoped this to the active tab,
+    // switching tabs would silently hide a row (and its already-earned GC)
+    // just because the account that earns it isn't on the current tab.
     const gcGroupKeys = Array.from(new Set(
-      filtered.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
+      accounts.filter(a=>accountTracksUfo(a)||accountTracksRelic(a)).map(a=> a.steamGroup ? a.steamGroup.trim() : '')
     )).sort((x,y)=>{
       if(!x) return 1; if(!y) return -1;
       return x.localeCompare(y, undefined, {numeric:true});
@@ -1090,12 +1096,12 @@
         nameEl.textContent = key || 'No Steam login';
         groupWrap.appendChild(nameEl);
 
-        const hasRelic = filtered.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const hasRelic = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
         if(hasRelic){
           const rState = relicGroupGcState(key);
           const rPct = Math.min(100, Math.round((rState.total/RELIC_GC_WEEKLY_CAP)*100));
           const rFull = rState.total >= RELIC_GC_WEEKLY_CAP;
-          const relicDoneToday = filtered.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
+          const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && (a.steamGroup?a.steamGroup.trim():'')===key && isAccountDone(a,'relic'));
           const row = document.createElement('div');
           row.className = 'at-gc-row' + (rFull ? ' full' : '');
           row.innerHTML = `
@@ -1117,12 +1123,12 @@
           groupWrap.appendChild(row);
         }
 
-        const hasUfo = filtered.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
+        const hasUfo = accounts.some(a=>accountTracksUfo(a) && (a.steamGroup?a.steamGroup.trim():'')===key);
         if(hasUfo){
           const state = steamGroupUfoState(key);
           const pct = Math.min(100, Math.round((state.total/GC_WEEKLY_CAP)*100));
           const isFull = state.total >= GC_WEEKLY_CAP;
-          const groupAccounts = filtered.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key);
+          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && (a.steamGroup ? a.steamGroup.trim() : '')===key);
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
           const row = document.createElement('div');
           row.className = 'at-gc-row' + (isFull ? ' full' : '');
