@@ -497,6 +497,74 @@
     background:rgba(255,107,110,0.08); border:1px solid rgba(255,107,110,0.35); color:var(--danger);
     border-radius:10px; padding:10px 14px; font-size:12.5px; margin-bottom:16px;
   }
+
+  /* ---- View switch (Roster / Orders) ---- */
+  .at-view-switch{display:flex; gap:8px; margin-bottom:18px;}
+  .at-view-btn{
+    font-family:var(--font-display); font-size:13px; font-weight:700; letter-spacing:.2px;
+    padding:11px 20px; border-radius:12px; border:1px solid var(--line);
+    background:var(--surface); color:var(--muted); cursor:pointer; transition:.18s ease;
+  }
+  .at-view-btn:hover{border-color:var(--accent); color:var(--text); transform:translateY(-1px);}
+  .at-view-btn.active{
+    background:linear-gradient(160deg, rgba(111,255,176,0.14), rgba(111,255,176,0) 60%), var(--surface2);
+    color:var(--accent); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;
+  }
+
+  /* ---- Orders ---- */
+  .ord-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:18px;}
+  .ord-card{
+    position:relative; background:var(--surface); border:1px solid var(--line); border-radius:16px;
+    padding:18px; overflow:hidden; transition:.18s ease;
+  }
+  .ord-card:hover{border-color:var(--accent-dim); transform:translateY(-3px); box-shadow:0 20px 40px -20px rgba(0,0,0,0.7);}
+  .ord-card::before{content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-dim);}
+  .ord-card.status-pending::before{background:var(--warn);}
+  .ord-card.status-fusing::before{background:var(--signal);}
+  .ord-card.status-ready::before{background:var(--accent);}
+  .ord-card.status-delivered::before{background:var(--inherit);}
+  .ord-card.status-cancelled::before{background:var(--danger);}
+  .ord-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .ord-buyer{font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--text); margin:0 0 2px;}
+  .ord-deviant{font-size:12.5px; color:var(--muted); font-family:var(--font-mono);}
+  .ord-price{font-family:var(--font-mono); font-size:15px; font-weight:700; color:var(--accent); white-space:nowrap;}
+  .ord-status-badge{
+    display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:10px;
+    letter-spacing:1px; text-transform:uppercase; padding:4px 9px; border-radius:999px; margin:6px 0 10px;
+    border:1px solid var(--line);
+  }
+  .ord-status-badge.status-pending{color:var(--warn); border-color:rgba(255,180,84,.4); background:rgba(255,180,84,.1);}
+  .ord-status-badge.status-fusing{color:var(--signal); border-color:var(--signal-dim); background:var(--signal-dim);}
+  .ord-status-badge.status-ready{color:var(--accent); border-color:var(--accent-dim); background:var(--accent-soft);}
+  .ord-status-badge.status-delivered{color:var(--inherit); border-color:var(--inherit-dim); background:var(--inherit-soft);}
+  .ord-status-badge.status-cancelled{color:var(--danger); border-color:rgba(255,107,110,.35); background:rgba(255,107,110,.08);}
+  .ord-traits{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .ord-trait-chip{
+    font-family:var(--font-mono); font-size:10px; color:var(--text); background:var(--surface3);
+    border:1px solid var(--line); border-radius:7px; padding:3px 8px;
+  }
+  .ord-meta-row{display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11px; color:var(--muted); margin-bottom:8px;}
+  .ord-meta-row span b{color:var(--text); font-weight:600;}
+  .ord-notes{font-size:12px; color:var(--muted); line-height:1.5; border-top:1px solid var(--line-soft); padding-top:10px; margin-top:4px; white-space:pre-wrap;}
+  .ord-actions{display:flex; gap:6px; flex-shrink:0;}
+
+  /* ---- Deviant/trait master list ---- */
+  .dev-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px;}
+  .dev-card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px;}
+  .dev-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .dev-name{font-family:var(--font-display); font-size:15px; font-weight:700; color:var(--text);}
+  .dev-traits{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; min-height:24px;}
+  .dev-trait-chip{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:10.5px;
+    color:var(--text); background:var(--surface3); border:1px solid var(--line); border-radius:7px; padding:4px 6px 4px 9px;
+  }
+  .dev-trait-chip button{
+    all:unset; cursor:pointer; color:var(--muted); font-size:12px; line-height:1; padding:0 2px;
+  }
+  .dev-trait-chip button:hover{color:var(--danger);}
+  .dev-add-trait{display:flex; gap:6px;}
+  .dev-add-trait input{flex:1;}
+  .ord-empty-hint{font-size:11.5px; color:var(--muted); font-style:italic; padding:4px 0;}
 </style>
 
   <style>
@@ -595,6 +663,11 @@
     <button class="at-btn small" id="atRetrySave">Retry</button>
   </div>
 
+  <div class="at-view-switch" id="atViewSwitch">
+    <button type="button" class="at-view-btn active" id="atViewRosterBtn">📋 Roster</button>
+    <button type="button" class="at-view-btn" id="atViewOrdersBtn">🧬 Orders</button>
+  </div>
+
   <div id="atStatus" class="at-loading">syncing roster...</div>
   <div id="atApp" style="display:none;">
     <div class="at-tabs" id="atTabs"></div>
@@ -605,6 +678,29 @@
       <button class="at-btn primary" id="atAddBtn">+ Add account</button>
     </div>
     <div class="at-grid" id="atGrid"></div>
+  </div>
+
+  <div id="ordApp" style="display:none;">
+    <div class="at-tabs" id="ordTabs"></div>
+
+    <div id="ordOrdersView">
+      <div class="at-addbar">
+        <span class="at-savestatus" id="ordSaveStatus">All changes saved</span>
+        <input class="at-input at-search" id="ordSearch" placeholder="Search orders..." autocomplete="off" />
+        <button class="at-btn primary" id="ordAddBtn">+ New order</button>
+      </div>
+      <div class="ord-grid" id="ordGrid"></div>
+    </div>
+
+    <div id="ordDeviantsView" style="display:none;">
+      <div class="at-addbar">
+        <span class="at-savestatus" id="devSaveStatus">All changes saved</span>
+        <input class="at-input at-search" id="devSearch" placeholder="Search deviants..." autocomplete="off" />
+        <button class="at-btn primary" id="devAddBtn">+ Add deviant</button>
+      </div>
+      <div class="ord-empty-hint" style="margin-bottom:12px;">This is your own master list — add every deviant you fuse and the legend traits you deal in for it, then pick from it when logging an order.</div>
+      <div class="dev-grid" id="devGrid"></div>
+    </div>
   </div>
   </div>
 </div>
@@ -641,6 +737,24 @@
   let accounts = [];
   let activeTab = 'ALL';
   let tickHandle = null;
+
+  // ---------- Orders / Deviant fusion business state ----------
+  const DEV_STORAGE_KEY = 'zt-deviants';
+  const ORD_STORAGE_KEY = 'zt-orders';
+  let deviants = [];      // [{id, name, traits:[{id,name}]}]
+  let orders = [];        // [{id, buyerName, deviantId, deviantName, traitIds:[], traitNames:[], price, status, orderDate, paymentMethod, deliveryMethod, notes, createdAt}]
+  let currentView = 'roster'; // 'roster' | 'orders'
+  let ordActiveTab = 'ORDERS'; // 'ORDERS' | 'DEVIANTS'
+  let ordSearchQuery = '';
+  let devSearchQuery = '';
+  const ORDER_STATUSES = [
+    {id:'pending', label:'Pending'},
+    {id:'fusing', label:'Fusing'},
+    {id:'ready', label:'Ready to deliver'},
+    {id:'delivered', label:'Delivered'},
+    {id:'cancelled', label:'Cancelled'}
+  ];
+  function orderStatusLabel(id){ const s = ORDER_STATUSES.find(x=>x.id===id); return s ? s.label : id; }
   const EL_CAP = 500000; // EDY2 sell limit per account
   const POINTS_CAP = 20000; // DSCP points cap per account
 
@@ -975,6 +1089,55 @@
       }
     }
   }
+  // ---------- Orders / Deviants storage (same plain-localStorage pattern) ----------
+  function loadOrdersData(){
+    try{
+      const rawDev = localStorage.getItem(DEV_STORAGE_KEY);
+      deviants = rawDev ? JSON.parse(rawDev) : [];
+    }catch(e){ deviants = []; }
+    try{
+      const rawOrd = localStorage.getItem(ORD_STORAGE_KEY);
+      orders = rawOrd ? JSON.parse(rawOrd) : [];
+    }catch(e){ orders = []; }
+  }
+  function genericSave(key, data, statusElId, retriesLeft){
+    if(retriesLeft === undefined) retriesLeft = 4;
+    setGenericSaveStatus(statusElId, 'saving', data.length);
+    try{
+      localStorage.setItem(key, JSON.stringify(data));
+      hideSaveError();
+      setGenericSaveStatus(statusElId, 'saved', data.length);
+    }catch(e){
+      console.error('save failed', key, e);
+      if(retriesLeft > 0){
+        const attempt = 4 - retriesLeft;
+        const delay = Math.min(600 * Math.pow(2, attempt), 6000);
+        setTimeout(()=> genericSave(key, data, statusElId, retriesLeft-1), delay);
+        return;
+      }
+      showSaveError();
+      setGenericSaveStatus(statusElId, 'error', data.length);
+    }
+  }
+  function setGenericSaveStatus(elId, state, count){
+    const el = document.getElementById(elId);
+    if(!el) return;
+    el.classList.remove('saving','saved','error');
+    if(state==='saving'){
+      el.classList.add('saving');
+      el.textContent = 'Saving...';
+    } else if(state==='saved'){
+      el.classList.add('saved');
+      const t = nowShifted();
+      el.textContent = 'All ' + count + ' saved · ' + fmtClock(t) + ' PH';
+    } else if(state==='error'){
+      el.classList.add('error');
+      el.textContent = 'Save failed — check connection';
+    }
+  }
+  function saveDeviants(){ genericSave(DEV_STORAGE_KEY, deviants, 'devSaveStatus'); }
+  function saveOrders(){ genericSave(ORD_STORAGE_KEY, orders, 'ordSaveStatus'); }
+
   function setSaveStatus(state){
     const el = document.getElementById('atSaveStatus');
     if(!el) return;
@@ -2432,6 +2595,384 @@
     };
   }
 
+  // ---------- View switch (Roster / Orders) ----------
+  function setView(view){
+    currentView = view;
+    document.getElementById('atViewRosterBtn').classList.toggle('active', view==='roster');
+    document.getElementById('atViewOrdersBtn').classList.toggle('active', view==='orders');
+    document.getElementById('atStatus').style.display = (view==='roster') ? '' : 'none';
+    // atStatus may already be hidden post-load; only roster app itself needs toggling
+    document.getElementById('atApp').style.display = (view==='roster') ? 'block' : 'none';
+    if(view==='roster') document.getElementById('atStatus').style.display = 'none';
+    document.getElementById('ordApp').style.display = (view==='orders') ? 'block' : 'none';
+    if(view==='orders'){ renderOrdTabs(); renderOrdersOrDeviants(); }
+  }
+
+  function renderOrdTabs(){
+    const wrap = document.getElementById('ordTabs');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    const ordersBtn = document.createElement('button');
+    ordersBtn.className = 'at-tab' + (ordActiveTab==='ORDERS' ? ' active' : '');
+    ordersBtn.textContent = 'Orders · ' + orders.length;
+    ordersBtn.onclick = ()=>{ ordActiveTab='ORDERS'; renderOrdTabs(); renderOrdersOrDeviants(); };
+    wrap.appendChild(ordersBtn);
+    const devBtn = document.createElement('button');
+    devBtn.className = 'at-tab' + (ordActiveTab==='DEVIANTS' ? ' active' : '');
+    devBtn.textContent = 'Deviant / trait list · ' + deviants.length;
+    devBtn.onclick = ()=>{ ordActiveTab='DEVIANTS'; renderOrdTabs(); renderOrdersOrDeviants(); };
+    wrap.appendChild(devBtn);
+  }
+
+  function renderOrdersOrDeviants(){
+    document.getElementById('ordOrdersView').style.display = (ordActiveTab==='ORDERS') ? 'block' : 'none';
+    document.getElementById('ordDeviantsView').style.display = (ordActiveTab==='DEVIANTS') ? 'block' : 'none';
+    if(ordActiveTab==='ORDERS') renderOrdersGrid(); else renderDeviantsGrid();
+  }
+
+  // ---------- Orders grid ----------
+  function fmtOrderDate(d){
+    if(!d) return '--';
+    try{
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    }catch(e){ return d; }
+  }
+  function renderOrdersGrid(){
+    const grid = document.getElementById('ordGrid');
+    if(!grid) return;
+    grid.innerHTML = '';
+    let list = orders.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    if(ordSearchQuery){
+      list = list.filter(o=>
+        (o.buyerName||'').toLowerCase().includes(ordSearchQuery) ||
+        (o.deviantName||'').toLowerCase().includes(ordSearchQuery) ||
+        (o.traitNames||[]).join(' ').toLowerCase().includes(ordSearchQuery)
+      );
+    }
+    if(list.length===0){
+      grid.innerHTML = '<div class="at-empty">No orders yet' + (ordSearchQuery ? ' matching your search.' : ' — tap "+ New order" to log your first fusion order.') + '</div>';
+      return;
+    }
+    list.forEach(o=>{
+      const card = document.createElement('div');
+      card.className = 'ord-card status-' + (o.status||'pending');
+      const traitsHtml = (o.traitNames && o.traitNames.length)
+        ? '<div class="ord-traits">' + o.traitNames.map(t=>'<span class="ord-trait-chip">'+escapeHtml(t)+'</span>').join('') + '</div>'
+        : '<div class="ord-empty-hint">No traits selected</div>';
+      const metaBits = [];
+      if(o.orderDate) metaBits.push('<span>Ordered <b>'+fmtOrderDate(o.orderDate)+'</b></span>');
+      if(o.paymentMethod) metaBits.push('<span>Pay <b>'+escapeHtml(o.paymentMethod)+'</b></span>');
+      if(o.deliveryMethod) metaBits.push('<span>Deliver <b>'+escapeHtml(o.deliveryMethod)+'</b></span>');
+      card.innerHTML = `
+        <div class="ord-head">
+          <div>
+            <p class="ord-buyer">${escapeHtml(o.buyerName || 'Unnamed buyer')}</p>
+            <span class="ord-deviant">${escapeHtml(o.deviantName || 'No deviant set')}</span>
+          </div>
+          <div class="ord-actions">
+            <span class="ord-price">${o.price ? escapeHtml(o.price) : ''}</span>
+          </div>
+        </div>
+        <span class="ord-status-badge status-${o.status||'pending'}">${orderStatusLabel(o.status||'pending')}</span>
+        ${traitsHtml}
+        ${metaBits.length ? '<div class="ord-meta-row">'+metaBits.join('')+'</div>' : ''}
+        ${o.notes ? '<div class="ord-notes">'+escapeHtml(o.notes)+'</div>' : ''}
+      `;
+      card.style.cursor = 'pointer';
+      card.onclick = ()=> openOrderModal(o);
+      grid.appendChild(card);
+    });
+  }
+
+  function openOrderModal(existing){
+    const isEdit = !!existing;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'at-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="at-modal">
+        <h3>${isEdit ? 'Edit order' : 'New order'}</h3>
+        <label>Buyer name</label>
+        <input class="at-input" id="oBuyer" placeholder="e.g. discord username, IGN..." />
+
+        <label>Deviant</label>
+        <select class="at-select" id="oDeviant">
+          <option value="">-- select deviant --</option>
+          ${deviants.map(d=>'<option value="'+d.id+'">'+escapeHtml(d.name)+'</option>').join('')}
+        </select>
+        ${deviants.length===0 ? '<p class="at-hint">You have no deviants in your master list yet. Cancel this and add one under the "Deviant / trait list" tab first, or just type the name below.</p>' : ''}
+        <input class="at-input" id="oDeviantFree" placeholder="Or type a deviant name (if not in your list)" style="margin-top:8px;" />
+
+        <label>Legend traits for this order</label>
+        <div class="dev-traits" id="oTraitsWrap"><span class="ord-empty-hint">Pick a deviant above to see its traits.</span></div>
+
+        <div class="at-field-row">
+          <div style="flex:1;">
+            <label>Price</label>
+            <input class="at-input" id="oPrice" placeholder="e.g. 250 GCash / 500 in-game" />
+          </div>
+          <div style="flex:1;">
+            <label>Status</label>
+            <select class="at-select" id="oStatus">
+              ${ORDER_STATUSES.map(s=>'<option value="'+s.id+'">'+s.label+'</option>').join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="at-field-row">
+          <div style="flex:1;">
+            <label>Order date</label>
+            <input class="at-input" id="oDate" type="date" />
+          </div>
+          <div style="flex:1;">
+            <label>Payment method</label>
+            <input class="at-input" id="oPayment" list="oPaymentList" placeholder="e.g. GCash, PayPal, In-game trade" />
+            <datalist id="oPaymentList">
+              <option value="GCash"></option>
+              <option value="PayPal"></option>
+              <option value="In-game trade"></option>
+              <option value="Steam trade"></option>
+            </datalist>
+          </div>
+        </div>
+
+        <label>Delivery method</label>
+        <input class="at-input" id="oDelivery" list="oDeliveryList" placeholder="e.g. In-game mail, meetup, direct trade" />
+        <datalist id="oDeliveryList">
+          <option value="In-game trade"></option>
+          <option value="In-game mail"></option>
+          <option value="Meetup"></option>
+        </datalist>
+
+        <label>Notes</label>
+        <textarea class="at-input" id="oNotes" rows="3" style="resize:vertical; font-family:var(--font-body);" placeholder="Anything else about this order..."></textarea>
+
+        <div class="at-modal-actions">
+          ${isEdit ? '<button class="at-btn ghost" id="oDelete" style="color:var(--danger); border-color:var(--danger); margin-right:auto;">Delete order</button>' : ''}
+          <button class="at-btn ghost" id="oCancel">Cancel</button>
+          <button class="at-btn primary" id="oSave">${isEdit ? 'Save' : 'Add order'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const deviantSel = backdrop.querySelector('#oDeviant');
+    const deviantFree = backdrop.querySelector('#oDeviantFree');
+    const traitsWrap = backdrop.querySelector('#oTraitsWrap');
+
+    function renderTraitCheckboxes(devId, checkedIds){
+      const dev = deviants.find(d=>d.id===devId);
+      if(!dev || !dev.traits || dev.traits.length===0){
+        traitsWrap.innerHTML = '<span class="ord-empty-hint">This deviant has no traits saved yet. Add some under "Deviant / trait list".</span>';
+        return;
+      }
+      traitsWrap.innerHTML = dev.traits.map(t=>{
+        const checked = checkedIds && checkedIds.includes(t.id) ? 'checked' : '';
+        return '<label class="dev-trait-chip" style="cursor:pointer;"><input type="checkbox" value="'+t.id+'" data-name="'+escapeHtml(t.name)+'" '+checked+' style="margin:0;" /> '+escapeHtml(t.name)+'</label>';
+      }).join('');
+    }
+
+    deviantSel.onchange = ()=>{
+      if(deviantSel.value) deviantFree.value = '';
+      renderTraitCheckboxes(deviantSel.value, isEdit ? existing.traitIds : []);
+    };
+    deviantFree.oninput = ()=>{
+      if(deviantFree.value.trim()) deviantSel.value = '';
+    };
+
+    if(isEdit){
+      backdrop.querySelector('#oBuyer').value = existing.buyerName || '';
+      if(existing.deviantId && deviants.find(d=>d.id===existing.deviantId)){
+        deviantSel.value = existing.deviantId;
+        renderTraitCheckboxes(existing.deviantId, existing.traitIds || []);
+      } else {
+        deviantFree.value = existing.deviantName || '';
+      }
+      backdrop.querySelector('#oPrice').value = existing.price || '';
+      backdrop.querySelector('#oStatus').value = existing.status || 'pending';
+      backdrop.querySelector('#oDate').value = existing.orderDate || '';
+      backdrop.querySelector('#oPayment').value = existing.paymentMethod || '';
+      backdrop.querySelector('#oDelivery').value = existing.deliveryMethod || '';
+      backdrop.querySelector('#oNotes').value = existing.notes || '';
+    } else {
+      const today = nowShifted();
+      const yyyy = today.getUTCFullYear();
+      const mm = String(today.getUTCMonth()+1).padStart(2,'0');
+      const dd = String(today.getUTCDate()).padStart(2,'0');
+      backdrop.querySelector('#oDate').value = yyyy+'-'+mm+'-'+dd;
+    }
+
+    backdrop.querySelector('#oCancel').onclick = ()=> backdrop.remove();
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+
+    if(isEdit){
+      backdrop.querySelector('#oDelete').onclick = async ()=>{
+        const ok = await showConfirm('Delete this order? This can\'t be undone.', 'Delete');
+        if(ok){
+          orders = orders.filter(o=>o.id!==existing.id);
+          saveOrders();
+          backdrop.remove();
+          renderOrdersGrid();
+          renderOrdTabs();
+        }
+      };
+    }
+
+    backdrop.querySelector('#oSave').onclick = ()=>{
+      const buyerName = backdrop.querySelector('#oBuyer').value.trim();
+      const devId = deviantSel.value || null;
+      const dev = devId ? deviants.find(d=>d.id===devId) : null;
+      const deviantName = dev ? dev.name : deviantFree.value.trim();
+      const checkedBoxes = Array.from(traitsWrap.querySelectorAll('input[type="checkbox"]:checked'));
+      const traitIds = checkedBoxes.map(cb=>cb.value);
+      const traitNames = checkedBoxes.map(cb=>cb.dataset.name);
+      const price = backdrop.querySelector('#oPrice').value.trim();
+      const status = backdrop.querySelector('#oStatus').value;
+      const orderDate = backdrop.querySelector('#oDate').value;
+      const paymentMethod = backdrop.querySelector('#oPayment').value.trim();
+      const deliveryMethod = backdrop.querySelector('#oDelivery').value.trim();
+      const notes = backdrop.querySelector('#oNotes').value.trim();
+
+      if(isEdit){
+        Object.assign(existing, {buyerName, deviantId:devId, deviantName, traitIds, traitNames, price, status, orderDate, paymentMethod, deliveryMethod, notes});
+      } else {
+        orders.push({
+          id: uid(), buyerName, deviantId:devId, deviantName, traitIds, traitNames, price, status, orderDate,
+          paymentMethod, deliveryMethod, notes, createdAt: Date.now()
+        });
+      }
+      saveOrders();
+      backdrop.remove();
+      renderOrdersGrid();
+      renderOrdTabs();
+    };
+  }
+
+  // ---------- Deviant / trait master list ----------
+  function renderDeviantsGrid(){
+    const grid = document.getElementById('devGrid');
+    if(!grid) return;
+    grid.innerHTML = '';
+    let list = deviants.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    if(devSearchQuery){
+      list = list.filter(d=> d.name.toLowerCase().includes(devSearchQuery) || (d.traits||[]).some(t=>t.name.toLowerCase().includes(devSearchQuery)));
+    }
+    if(list.length===0){
+      grid.innerHTML = '<div class="at-empty">No deviants saved yet' + (devSearchQuery ? ' matching your search.' : ' — tap "+ Add deviant" to start your list.') + '</div>';
+      return;
+    }
+    list.forEach(dev=>{
+      const card = document.createElement('div');
+      card.className = 'dev-card';
+      const traitsHtml = (dev.traits||[]).map(t=>
+        '<span class="dev-trait-chip">'+escapeHtml(t.name)+'<button type="button" data-trait="'+t.id+'" title="Remove trait">✕</button></span>'
+      ).join('') || '<span class="ord-empty-hint">No traits yet</span>';
+      card.innerHTML = `
+        <div class="dev-head">
+          <span class="dev-name">${escapeHtml(dev.name)}</span>
+          <div class="ord-actions">
+            <button class="at-btn small" data-act="rename">Rename</button>
+            <button class="at-btn small" data-act="delete" style="color:var(--danger); border-color:var(--danger);">Delete</button>
+          </div>
+        </div>
+        <div class="dev-traits">${traitsHtml}</div>
+        <div class="dev-add-trait">
+          <input class="at-input" placeholder="Add a legend trait..." data-add-trait />
+          <button class="at-btn small primary" data-act="addtrait">+ Add</button>
+        </div>
+      `;
+      card.querySelector('[data-act="rename"]').onclick = async ()=>{
+        const name = await promptDialog('Rename deviant', dev.name);
+        if(name && name.trim()){ dev.name = name.trim(); saveDeviants(); renderDeviantsGrid(); renderOrdTabs(); }
+      };
+      card.querySelector('[data-act="delete"]').onclick = async ()=>{
+        const ok = await showConfirm('Delete "'+escapeHtml(dev.name)+'"? Orders that reference this deviant keep their saved name/traits, but you won\'t be able to pick it again.', 'Delete');
+        if(ok){ deviants = deviants.filter(d=>d.id!==dev.id); saveDeviants(); renderDeviantsGrid(); renderOrdTabs(); }
+      };
+      const addBtn = card.querySelector('[data-act="addtrait"]');
+      const addInput = card.querySelector('[data-add-trait]');
+      const addTrait = ()=>{
+        const name = addInput.value.trim();
+        if(!name) return;
+        dev.traits = dev.traits || [];
+        dev.traits.push({id: uid(), name});
+        addInput.value = '';
+        saveDeviants();
+        renderDeviantsGrid();
+      };
+      addBtn.onclick = addTrait;
+      addInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addTrait(); } });
+      card.querySelectorAll('[data-trait]').forEach(btn=>{
+        btn.onclick = ()=>{
+          dev.traits = (dev.traits||[]).filter(t=>t.id!==btn.dataset.trait);
+          saveDeviants();
+          renderDeviantsGrid();
+        };
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function openAddDeviantModal(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'at-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="at-modal">
+        <h3>Add deviant</h3>
+        <label>Deviant name</label>
+        <input class="at-input" id="dName" placeholder="e.g. Lonewolf's Whisper" />
+        <p class="at-hint">You can add its legend traits right after, from its card in the list.</p>
+        <div class="at-modal-actions">
+          <button class="at-btn ghost" id="dCancel">Cancel</button>
+          <button class="at-btn primary" id="dSave">Add</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector('#dName');
+    input.focus();
+    backdrop.querySelector('#dCancel').onclick = ()=> backdrop.remove();
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) backdrop.remove(); });
+    const doSave = ()=>{
+      const name = input.value.trim();
+      if(!name) return;
+      deviants.push({id: uid(), name, traits: []});
+      saveDeviants();
+      backdrop.remove();
+      renderDeviantsGrid();
+      renderOrdTabs();
+    };
+    backdrop.querySelector('#dSave').onclick = doSave;
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doSave(); } });
+  }
+
+  // Small reusable text-prompt dialog (matches confirmDialog's styling/pattern)
+  function promptDialog(title, defaultValue){
+    return new Promise(resolve=>{
+      const backdrop = document.createElement('div');
+      backdrop.className = 'at-modal-backdrop';
+      backdrop.innerHTML = `
+        <div class="at-modal">
+          <h3>${title}</h3>
+          <input class="at-input" id="pInput" value="${escapeHtml(defaultValue||'')}" />
+          <div class="at-modal-actions">
+            <button class="at-btn ghost" id="pCancel">Cancel</button>
+            <button class="at-btn primary" id="pOk">Save</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      const input = backdrop.querySelector('#pInput');
+      input.focus();
+      input.select();
+      const cleanup = (result)=>{ backdrop.remove(); resolve(result); };
+      backdrop.querySelector('#pCancel').onclick = ()=> cleanup(null);
+      backdrop.querySelector('#pOk').onclick = ()=> cleanup(input.value);
+      input.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); cleanup(input.value); } });
+      backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) cleanup(null); });
+    });
+  }
+
   // ---------- Starfield background ----------
   let starCanvas, starCtx, stars = [];
   const REDUCE_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2502,10 +3043,11 @@
   // ---------- Init ----------
   async function init(){
     await loadData();
+    loadOrdersData();
     document.getElementById('atStatus').style.display='none';
     document.getElementById('atApp').style.display='block';
     document.getElementById('atAddBtn').onclick = ()=> openAccountModal(null);
-    document.getElementById('atRetrySave').onclick = ()=> saveAccounts();
+    document.getElementById('atRetrySave').onclick = ()=> { saveAccounts(); saveDeviants(); saveOrders(); };
     const gravityBtn = document.getElementById('gravityNotifyBtn');
     if(gravityBtn) gravityBtn.onclick = toggleGravityNotify;
     setGravityNotifyBtnState();
@@ -2516,6 +3058,29 @@
         renderGrid();
       });
     }
+
+    // Orders/Deviants view wiring
+    document.getElementById('atViewRosterBtn').onclick = ()=> setView('roster');
+    document.getElementById('atViewOrdersBtn').onclick = ()=> setView('orders');
+    document.getElementById('ordAddBtn').onclick = ()=> openOrderModal(null);
+    document.getElementById('devAddBtn').onclick = ()=> openAddDeviantModal();
+    const ordSearchInput = document.getElementById('ordSearch');
+    if(ordSearchInput){
+      ordSearchInput.addEventListener('input', ()=>{
+        ordSearchQuery = ordSearchInput.value.trim().toLowerCase();
+        renderOrdersGrid();
+      });
+    }
+    const devSearchInput = document.getElementById('devSearch');
+    if(devSearchInput){
+      devSearchInput.addEventListener('input', ()=>{
+        devSearchQuery = devSearchInput.value.trim().toLowerCase();
+        renderDeviantsGrid();
+      });
+    }
+    setGenericSaveStatus('devSaveStatus', 'saved', deviants.length);
+    setGenericSaveStatus('ordSaveStatus', 'saved', orders.length);
+
     renderAll();
     updateHud();
     setSaveStatus('saved');
