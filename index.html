@@ -1356,10 +1356,16 @@
     const filtered = getTabFiltered(accounts);
     wrap.innerHTML = '';
     if(filtered.length===0){ return; }
-    [
+    // On the Pending tab we only want to surface work that's still owed, so
+    // the top-level RELIC/UFO summary bars (which just restate the same
+    // 0/5, 0/10-style totals already broken out per-login below) are
+    // skipped entirely — that info lives in the GC-by-Steam-login card
+    // instead, and only its still-pending rows are shown there.
+    const pendingTabOnly = activeTab==='PENDING';
+    (pendingTabOnly ? [] : [
       {key:'relic', label:'RELIC · today', scope: filtered.filter(accountTracksRelic)},
       {key:'ufo', label:'UFO · this week', scope: filtered.filter(accountTracksUfo)}
-    ].forEach(cfg=>{
+    ]).forEach(cfg=>{
       const total = cfg.scope.length;
       if(total===0) return;
       const done = cfg.scope.filter(a=>isAccountDone(a, cfg.key)).length;
@@ -1424,11 +1430,14 @@
         const k = gcPoolKey(a);
         if(!gcKeyLabels.has(k)) gcKeyLabels.set(k, gcPoolLabel(a));
       });
-    const gcGroupKeys = Array.from(gcKeyLabels.keys()).sort((x,y)=>{
+    let gcGroupKeys = Array.from(gcKeyLabels.keys()).sort((x,y)=>{
       const xDone = steamGroupFullyDone(x), yDone = steamGroupFullyDone(y);
       if(xDone !== yDone) return xDone ? 1 : -1; // pending logins first, done logins sink down
       return gcKeyLabels.get(x).localeCompare(gcKeyLabels.get(y), undefined, {numeric:true});
     });
+    // Pending tab: a login with nothing left to click has nothing to show
+    // here at all, not even as a collapsed one-liner — drop it entirely.
+    if(pendingTabOnly) gcGroupKeys = gcGroupKeys.filter(key=>!steamGroupFullyDone(key));
     if(gcGroupKeys.length){
       const gcCard = document.createElement('div');
       gcCard.className = 'at-progress-card';
@@ -1495,7 +1504,7 @@
         `;
         groupWrap.appendChild(totalRow);
 
-        if(hasRelic){
+        if(hasRelic && !(pendingTabOnly && accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key && isAccountDone(a,'relic')))){
           const relicDoneToday = accounts.some(a=>accountTracksRelic(a) && gcPoolKey(a)===key && isAccountDone(a,'relic'));
           const row = document.createElement('div');
           row.className = 'at-gc-row';
@@ -1554,11 +1563,13 @@
           groupWrap.appendChild(row);
         }
 
-        if(hasUfo){
+        const ufoGroupAccountsAll = accounts.filter(a=> accountTracksUfo(a) && gcPoolKey(a)===key && (!activeServerFilter || a.server===activeServerFilter));
+        const ufoHasPending = ufoGroupAccountsAll.some(a=> !isAccountDone(a,'ufo'));
+        if(hasUfo && (!pendingTabOnly || ufoHasPending)){
           const ufoTotal = Object.values(state.ufoEarnedById).reduce((s,v)=>s+v,0);
-          const groupAccounts = accounts.filter(a=> accountTracksUfo(a) && gcPoolKey(a)===key && (!activeServerFilter || a.server===activeServerFilter));
+          const groupAccounts = ufoGroupAccountsAll;
           const pending = groupAccounts.filter(a=> !isAccountDone(a,'ufo'));
-          const doneAccs = groupAccounts.filter(a=> isAccountDone(a,'ufo'));
+          const doneAccs = pendingTabOnly ? [] : groupAccounts.filter(a=> isAccountDone(a,'ufo'));
           const row = document.createElement('div');
           row.className = 'at-gc-row';
           row.innerHTML = `
