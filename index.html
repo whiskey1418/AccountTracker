@@ -1515,6 +1515,13 @@
             </div>
           `;
           if(!relicDoneToday){
+            // RELIC is shared per Steam login — any account on this login
+            // that tracks RELIC will do, markAccountDone propagates it. Grab
+            // it up front so we can show which username/IGN this row is for.
+            const relicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
+            const relicLabel = relicAcc
+              ? (relicAcc.steamGroup ? relicAcc.steamGroup.trim() : (relicAcc.name || 'Unnamed account'))
+              : '';
             const todayAmount = state.pastCutoff ? 0 : RELIC_GC_PER_DAY;
             const tagClass = state.pastCutoff ? 'capped' : '';
             const tagText = todayAmount.toLocaleString()+' GC today' + (state.pastCutoff ? ' (capped)' : '');
@@ -1524,14 +1531,14 @@
             item.className = 'at-gc-pending-item';
             const tag = document.createElement('span');
             tag.className = 'at-gc-pending-tag ' + tagClass;
-            tag.innerHTML = `Today <b>${tagText}</b>`;
+            tag.innerHTML = relicLabel
+              ? `${escapeHtml(relicLabel)} · Today <b>${tagText}</b>`
+              : `Today <b>${tagText}</b>`;
             const doneBtn = document.createElement('button');
             doneBtn.className = 'at-gc-done-btn';
             doneBtn.textContent = 'Done';
             doneBtn.title = 'Mark today\'s RELIC done for this Steam login';
             doneBtn.onclick = async ()=>{
-              // RELIC is shared per Steam login — any account on this login
-              // that tracks RELIC will do, markAccountDone propagates it.
               const anyRelicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
               if(anyRelicAcc) await markAccountDone(anyRelicAcc, 'relic');
             };
@@ -1540,13 +1547,19 @@
             pendWrap.appendChild(item);
             row.appendChild(pendWrap);
           } else {
+            const doneRelicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
+            const doneRelicLabel = doneRelicAcc
+              ? (doneRelicAcc.steamGroup ? doneRelicAcc.steamGroup.trim() : (doneRelicAcc.name || 'Unnamed account'))
+              : '';
             const doneWrap = document.createElement('div');
             doneWrap.className = 'at-gc-pending';
             const item = document.createElement('div');
             item.className = 'at-gc-pending-item';
             const tag = document.createElement('span');
             tag.className = 'at-gc-pending-tag done-tag';
-            tag.textContent = 'RELIC done today ✓';
+            tag.textContent = doneRelicLabel
+              ? (doneRelicLabel + ' · RELIC done today ✓')
+              : 'RELIC done today ✓';
             const undoBtn = document.createElement('button');
             undoBtn.className = 'at-gc-done-btn undo';
             undoBtn.textContent = 'Undo';
