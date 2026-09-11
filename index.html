@@ -1520,7 +1520,8 @@
             // it up front so we can show which username/IGN this row is for.
             const relicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
             const relicLabel = relicAcc
-              ? (relicAcc.steamGroup ? relicAcc.steamGroup.trim() : (relicAcc.name || 'Unnamed account'))
+              ? ((relicAcc.steamGroup ? relicAcc.steamGroup.trim() : (relicAcc.name || 'Unnamed account'))
+                  + (relicAcc.steamGroup && relicAcc.name ? ` (${relicAcc.name})` : ''))
               : '';
             const todayAmount = state.pastCutoff ? 0 : RELIC_GC_PER_DAY;
             const tagClass = state.pastCutoff ? 'capped' : '';
@@ -1549,7 +1550,8 @@
           } else {
             const doneRelicAcc = accounts.find(a=>accountTracksRelic(a) && gcPoolKey(a)===key);
             const doneRelicLabel = doneRelicAcc
-              ? (doneRelicAcc.steamGroup ? doneRelicAcc.steamGroup.trim() : (doneRelicAcc.name || 'Unnamed account'))
+              ? ((doneRelicAcc.steamGroup ? doneRelicAcc.steamGroup.trim() : (doneRelicAcc.name || 'Unnamed account'))
+                  + (doneRelicAcc.steamGroup && doneRelicAcc.name ? ` (${doneRelicAcc.name})` : ''))
               : '';
             const doneWrap = document.createElement('div');
             doneWrap.className = 'at-gc-pending';
