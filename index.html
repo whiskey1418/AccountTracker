@@ -565,41 +565,198 @@
   .dev-add-trait{display:flex; gap:6px;}
   .dev-add-trait input{flex:1;}
   .ord-empty-hint{font-size:11.5px; color:var(--muted); font-style:italic; padding:4px 0;}
+
+  /* ---- Header icon actions (change password / lock) ---- */
+  .at-scanhead-right{display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0;}
+  .at-head-actions{display:flex; gap:8px;}
+  .at-headbtn{
+    width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:var(--surface2);
+    color:var(--muted); font-size:14px; cursor:pointer; transition:.18s ease;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;
+  }
+  .at-headbtn:hover{border-color:var(--accent); color:var(--accent); transform:translateY(-1px);}
+
+  /* =====================================================================
+     Responsive layout — desktop gets breathing room and multi-column
+     density; phone gets stacked, full-width, thumb-friendly controls.
+     ===================================================================== */
+
+  /* Roomier desktop / large monitors */
+  @media (min-width:1300px){
+    .at-root{max-width:1360px;}
+    .at-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+  }
+
+  /* Tablet */
+  @media (max-width:820px){
+    .at-root{padding:18px 16px 40px;}
+    .at-hud{gap:8px;}
+    .at-hud-chip{flex:1 1 calc(33.333% - 8px); min-width:130px;}
+  }
+
+  /* Phone */
+  @media (max-width:640px){
+    .at-root{padding:14px 12px 32px;}
+    .at-scanline{padding:16px 14px; border-radius:14px; margin-bottom:16px;}
+    .at-scanhead{gap:10px;}
+    .at-title{font-size:19px;}
+    .at-sub{font-size:12.5px;}
+    .at-eyebrow{font-size:10px; letter-spacing:2px;}
+    .at-headbtn{width:30px; height:30px; font-size:12px; border-radius:8px;}
+    .at-hud{grid-template-columns:1fr 1fr; gap:8px; margin-top:16px; padding-top:14px;}
+    .at-hud-chip{flex:unset; min-width:0; padding:9px 10px;}
+    .at-hud-chip .at-hud-value{font-size:14.5px;}
+    .at-notify-btn{width:20px; height:20px;}
+
+    .at-view-switch{gap:6px;}
+    .at-view-btn{flex:1; text-align:center; padding:10px 6px; font-size:12.5px;}
+
+    .at-tabs{flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:6px; margin-bottom:14px; scrollbar-width:none;}
+    .at-tabs::-webkit-scrollbar{display:none;}
+    .at-tab{flex-shrink:0;}
+    .at-tab.inprogress-tab{margin-left:0;}
+
+    .at-progress-row{flex-direction:column; gap:10px;}
+    .at-progress-card{min-width:0;}
+
+    .at-addbar{flex-wrap:wrap; gap:8px;}
+    .at-savestatus{order:3; width:100%; margin-right:0; margin-top:2px;}
+    .at-search{order:1; flex:1 1 100%;}
+    .at-addbar .at-btn.primary{order:2; flex:1 1 100%;}
+
+    .at-grid, .ord-grid, .dev-grid{grid-template-columns:1fr;}
+    .at-card, .ord-card, .dev-card{padding:16px;}
+
+    .at-el-quickrow{gap:5px;}
+    .at-quick-chip{padding:9px 4px; font-size:11px;}
+
+    .at-modal{padding:18px; border-radius:14px; max-width:100%;}
+    .at-modal-backdrop{padding:12px; align-items:flex-end;}
+    .at-modal{max-height:88vh; overflow-y:auto;}
+
+    .ord-head{flex-wrap:wrap;}
+    .ord-actions{flex-wrap:wrap;}
+  }
+
+  @media (max-width:380px){
+    .at-hud{grid-template-columns:1fr;}
+  }
 </style>
 
   <style>
     #gateScreen{
-      position:fixed; inset:0; background:#090C12; color:#EAF0F6;
+      position:fixed; inset:0; color:#EAF0F6; -webkit-font-smoothing:antialiased;
       display:flex; align-items:center; justify-content:center; z-index:9999;
       font-family:'Segoe UI', sans-serif; padding:20px;
+      background:
+        radial-gradient(ellipse 700px 480px at 18% 8%, rgba(111,255,176,0.08), transparent 60%),
+        radial-gradient(ellipse 600px 460px at 90% 100%, rgba(79,213,240,0.07), transparent 60%),
+        #090C12;
     }
     #gateBox{
-      width:100%; max-width:320px; background:#12161F; border:1px solid #232B38;
-      border-radius:16px; padding:28px 24px; text-align:center;
+      width:100%; max-width:340px; background:#12161F; border:1px solid #232B38;
+      border-radius:18px; padding:30px 26px; text-align:center; position:relative; overflow:hidden;
+      box-shadow:0 30px 70px -30px rgba(0,0,0,0.85);
+      animation:gateIn .35s ease;
     }
-    #gateBox h2{margin:0 0 6px; font-size:18px;}
-    #gateBox p{margin:0 0 18px; font-size:12.5px; color:#8A93A6; line-height:1.5;}
-    #gatePw{
+    @keyframes gateIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+    #gateBox::before{
+      content:''; position:absolute; left:0; right:0; top:0; height:2px;
+      background:linear-gradient(90deg, transparent, #6FFFB0, #4FD5F0, transparent); opacity:.7;
+    }
+    #gateIconWrap{
+      width:52px; height:52px; margin:2px auto 14px; border-radius:14px;
+      background:rgba(111,255,176,0.1); border:1px solid #1F4A3A;
+      display:flex; align-items:center; justify-content:center; font-size:24px;
+    }
+    #gateBox h2{margin:0 0 6px; font-size:17px; font-weight:700; letter-spacing:.2px;}
+    #gateSubtitle{margin:0 0 20px; font-size:12.5px; color:#8A93A6; line-height:1.55;}
+    .gate-pwwrap{position:relative; margin-bottom:11px;}
+    .gate-pwwrap input{
       width:100%; box-sizing:border-box; background:#1A2029; border:1px solid #232B38; color:#EAF0F6;
-      border-radius:9px; padding:11px 12px; font-size:14px; margin-bottom:12px; text-align:center;
+      border-radius:10px; padding:12px 40px 12px 14px; font-size:14.5px; font-family:inherit;
+      transition:border-color .15s ease;
     }
-    #gatePw:focus{outline:none; border-color:#6FFFB0;}
-    #gateBtn{
-      width:100%; background:#6FFFB0; color:#06120F; border:none; border-radius:9px;
-      padding:11px; font-size:13px; font-weight:700; cursor:pointer;
+    .gate-pwwrap input::placeholder{color:#5A6273;}
+    .gate-pwwrap input:focus{outline:none; border-color:#6FFFB0;}
+    .gate-eye{
+      position:absolute; right:4px; top:50%; transform:translateY(-50%);
+      width:32px; height:32px; border:none; background:none; color:#8A93A6; cursor:pointer;
+      font-size:15px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+      transition:.15s ease;
     }
-    #gateBtn:hover{filter:brightness(1.08);}
-    #gateErr{color:#FF6B6E; font-size:11.5px; margin-top:10px; min-height:14px;}
+    .gate-eye:hover{color:#EAF0F6; background:#1A2029;}
+    .gate-primary-btn{
+      width:100%; background:#6FFFB0; color:#06120F; border:none; border-radius:10px;
+      padding:12px; font-size:13.5px; font-weight:700; cursor:pointer; margin-top:4px;
+      transition:filter .15s ease, transform .15s ease;
+    }
+    .gate-primary-btn:hover{filter:brightness(1.08); transform:translateY(-1px);}
+    .gate-primary-btn:active{transform:translateY(0);}
+    .gate-primary-btn:disabled{opacity:.5; cursor:not-allowed; transform:none;}
+    .gate-hint{font-size:11px; color:#5A6273; margin-top:14px; line-height:1.5;}
+    .gate-link{
+      background:none; border:none; color:#4FD5F0; font-size:11.5px; cursor:pointer;
+      padding:0; text-decoration:underline; text-underline-offset:2px; margin-top:14px; font-family:inherit;
+    }
+    .gate-link:hover{color:#6FFFB0;}
+    #gateErr{color:#FF6B6E; font-size:11.5px; margin-top:12px; min-height:14px;}
+    #gateNotice{color:#6FFFB0; font-size:11.5px; margin-top:12px; min-height:14px;}
+    .gate-reset-box p{font-size:12px; color:#8A93A6; line-height:1.6; margin:0 0 18px; text-align:left;}
+    .gate-reset-actions{display:flex; gap:8px;}
+    .gate-reset-actions button{flex:1;}
+    .gate-btn-ghost{
+      background:transparent; border:1px solid #232B38; color:#8A93A6; border-radius:10px;
+      padding:12px; font-size:13px; font-weight:600; cursor:pointer; transition:.15s ease;
+    }
+    .gate-btn-ghost:hover{border-color:#4FD5F0; color:#EAF0F6;}
+    @media (max-width:400px){
+      #gateBox{padding:26px 20px; border-radius:16px;}
+    }
   </style>
 </head>
 <body>
   <div id="gateScreen">
     <div id="gateBox">
-      <h2>🔒 Zsammy Tracker</h2>
-      <p>Private tracker. Enter password to continue.</p>
-      <input type="password" id="gatePw" placeholder="Password" autocomplete="off" />
-      <button id="gateBtn">Unlock</button>
+      <div id="gateIconWrap">🔒</div>
+      <h2 id="gateTitle">Zsammy Tracker</h2>
+      <p id="gateSubtitle">Private tracker. Enter your password to continue.</p>
+
+      <!-- Login mode -->
+      <div id="gateLoginFields">
+        <div class="gate-pwwrap">
+          <input type="password" id="gatePw" placeholder="Password" autocomplete="current-password" />
+          <button type="button" class="gate-eye" id="gatePwEye" tabindex="-1" title="Show password">👁</button>
+        </div>
+        <button id="gateBtn" class="gate-primary-btn">Unlock</button>
+        <button type="button" id="gateForgotBtn" class="gate-link">Forgot password?</button>
+      </div>
+
+      <!-- First-run setup mode -->
+      <div id="gateSetupFields" style="display:none;">
+        <div class="gate-pwwrap">
+          <input type="password" id="gateNewPw" placeholder="Create a password" autocomplete="new-password" />
+          <button type="button" class="gate-eye" id="gateNewPwEye" tabindex="-1" title="Show password">👁</button>
+        </div>
+        <div class="gate-pwwrap">
+          <input type="password" id="gateNewPw2" placeholder="Confirm password" autocomplete="new-password" />
+          <button type="button" class="gate-eye" id="gateNewPw2Eye" tabindex="-1" title="Show password">👁</button>
+        </div>
+        <button id="gateSetupBtn" class="gate-primary-btn">Set password &amp; continue</button>
+        <p class="gate-hint">This password is saved only on this device/browser (nothing is sent anywhere). Clearing your browser data will require setting it again — your roster/order data is separate and won't be affected.</p>
+      </div>
+
+      <!-- Reset confirmation mode -->
+      <div id="gateResetFields" class="gate-reset-box" style="display:none;">
+        <p>This clears the saved password on this device so you can set a new one. Your tracker data (accounts, deviants, orders) is stored separately and will <b>not</b> be touched.</p>
+        <div class="gate-reset-actions">
+          <button type="button" id="gateResetCancel" class="gate-btn-ghost">Cancel</button>
+          <button type="button" id="gateResetConfirm" class="gate-primary-btn" style="margin-top:0;background:#FF6B6E;color:#fff;">Reset password</button>
+        </div>
+      </div>
+
       <div id="gateErr"></div>
+      <div id="gateNotice"></div>
     </div>
   </div>
 
@@ -615,7 +772,13 @@
         <h1 class="at-title">Zsammy Tracker</h1>
         <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), EL sold (every Wednesday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
       </div>
-      <div class="at-radar"></div>
+      <div class="at-scanhead-right">
+        <div class="at-head-actions">
+          <button type="button" id="changePwBtn" class="at-headbtn" title="Change password">🔐</button>
+          <button type="button" id="lockNowBtn" class="at-headbtn" title="Lock now">🔒</button>
+        </div>
+        <div class="at-radar"></div>
+      </div>
     </div>
     <div class="at-hud">
       <div class="at-hud-chip">
@@ -3120,18 +3283,29 @@
 
 
 <script>
+(function(){
   // =====================================================================
   // ACCESS GATE + NOTIFICATION
   // =====================================================================
-  // 1) Set your own password here (this is a basic deterrent only — since
-  //    this is a static site, anyone who really wants to could view the
-  //    page source and find it. It stops casual/accidental visitors, not
-  //    a determined attacker.)
-  const GATE_PASSWORD = "CHANGE_ME";
+  // The password now lives ONLY in this browser's localStorage, set by
+  // whoever opens the app the first time (or via "Change password" once
+  // unlocked) — nothing to edit in the source anymore. It's hashed
+  // (SHA-256 + a fixed salt) before being stored, so the plain password
+  // isn't sitting in localStorage in the clear. This is still a basic
+  // deterrent, not real security: a determined attacker with access to
+  // this device's storage/source could get past it. It stops casual /
+  // accidental visitors, not a determined one.
+  const GATE_HASH_KEY = 'zt_gate_pwhash';
+  const GATE_SALT = 'zsammy-tracker-gate-v2';
+  // Legacy hardcoded fallback: if a previous deployment of this file had a
+  // real password baked in here (not the placeholder), it gets migrated
+  // into the hashed form automatically on first load so nobody gets
+  // locked out by this update. New setups can ignore this.
+  const LEGACY_GATE_PASSWORD = "CHANGE_ME";
 
-  // 2) Paste the Web App URL from your Google Apps Script deployment here
-  //    to get a Gmail notification every time someone opens this page
-  //    (see DEPLOY.md for setup steps). Leave blank to disable.
+  // Paste the Web App URL from your Google Apps Script deployment here to
+  // get a Gmail notification every time someone opens or tries to open
+  // this page (see DEPLOY.md for setup steps). Leave blank to disable.
   const NOTIFY_URL = "";
 
   function notifyAccess(status){
@@ -3142,7 +3316,7 @@
         mode: "no-cors",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({
-          status: status, // "unlocked" | "failed_attempt"
+          status: status, // "unlocked" | "failed_attempt" | "password_set" | "password_changed"
           time: new Date().toISOString(),
           ua: navigator.userAgent
         })
@@ -3150,36 +3324,201 @@
     }catch(e){}
   }
 
+  async function sha256Hex(str){
+    const enc = new TextEncoder().encode(str);
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  function hashPassword(pw){ return sha256Hex(GATE_SALT + ':' + pw); }
+
+  async function migrateLegacyPasswordIfNeeded(){
+    if(localStorage.getItem(GATE_HASH_KEY)) return; // already set up
+    if(LEGACY_GATE_PASSWORD && LEGACY_GATE_PASSWORD !== 'CHANGE_ME'){
+      const h = await hashPassword(LEGACY_GATE_PASSWORD);
+      localStorage.setItem(GATE_HASH_KEY, h);
+    }
+  }
+
   const gateScreen = document.getElementById('gateScreen');
   const appRoot = document.getElementById('appRoot');
+  const gateTitle = document.getElementById('gateTitle');
+  const gateSubtitle = document.getElementById('gateSubtitle');
+  const gateIconWrap = document.getElementById('gateIconWrap');
+  const gateLoginFields = document.getElementById('gateLoginFields');
+  const gateSetupFields = document.getElementById('gateSetupFields');
+  const gateResetFields = document.getElementById('gateResetFields');
   const gatePw = document.getElementById('gatePw');
   const gateBtn = document.getElementById('gateBtn');
+  const gateForgotBtn = document.getElementById('gateForgotBtn');
+  const gateNewPw = document.getElementById('gateNewPw');
+  const gateNewPw2 = document.getElementById('gateNewPw2');
+  const gateSetupBtn = document.getElementById('gateSetupBtn');
+  const gateResetCancel = document.getElementById('gateResetCancel');
+  const gateResetConfirm = document.getElementById('gateResetConfirm');
   const gateErr = document.getElementById('gateErr');
+  const gateNotice = document.getElementById('gateNotice');
 
-  function tryUnlock(){
-    if(gatePw.value === GATE_PASSWORD){
-      sessionStorage.setItem('zt_unlocked', '1');
-      gateScreen.style.display = 'none';
-      appRoot.style.display = 'block';
+  function wireEye(inputId, btnId){
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    if(!input || !btn) return;
+    btn.addEventListener('click', ()=>{
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? '👁' : '🙈';
+      btn.title = showing ? 'Show password' : 'Hide password';
+      input.focus();
+    });
+  }
+  wireEye('gatePw','gatePwEye');
+  wireEye('gateNewPw','gateNewPwEye');
+  wireEye('gateNewPw2','gateNewPw2Eye');
+
+  function clearGateMessages(){ gateErr.textContent=''; gateNotice.textContent=''; }
+
+  function showLoginMode(notice){
+    gateLoginFields.style.display = 'block';
+    gateSetupFields.style.display = 'none';
+    gateResetFields.style.display = 'none';
+    gateIconWrap.textContent = '🔒';
+    gateTitle.textContent = 'Zsammy Tracker';
+    gateSubtitle.textContent = 'Private tracker. Enter your password to continue.';
+    clearGateMessages();
+    if(notice) gateNotice.textContent = notice;
+    gatePw.value = '';
+    setTimeout(()=> gatePw.focus(), 0);
+  }
+
+  function showSetupMode(){
+    gateLoginFields.style.display = 'none';
+    gateSetupFields.style.display = 'block';
+    gateResetFields.style.display = 'none';
+    gateIconWrap.textContent = '✨';
+    gateTitle.textContent = 'Set up Zsammy Tracker';
+    gateSubtitle.textContent = 'First time here — create a password to lock this tracker to this device.';
+    clearGateMessages();
+    setTimeout(()=> gateNewPw.focus(), 0);
+  }
+
+  function showResetMode(){
+    gateLoginFields.style.display = 'none';
+    gateSetupFields.style.display = 'none';
+    gateResetFields.style.display = 'block';
+    gateIconWrap.textContent = '⚠️';
+    gateTitle.textContent = 'Reset password?';
+    gateSubtitle.textContent = '';
+    clearGateMessages();
+  }
+
+  function enterApp(){
+    sessionStorage.setItem('zt_unlocked', '1');
+    gateScreen.style.display = 'none';
+    appRoot.style.display = 'block';
+    window.dispatchEvent(new Event('resize'));
+  }
+
+  async function tryUnlock(){
+    if(!gatePw.value){ return; }
+    const enteredHash = await hashPassword(gatePw.value);
+    const storedHash = localStorage.getItem(GATE_HASH_KEY);
+    if(enteredHash === storedHash){
       notifyAccess('unlocked');
-      window.dispatchEvent(new Event('resize'));
+      enterApp();
     } else {
       gateErr.textContent = 'Wrong password.';
       notifyAccess('failed_attempt');
       gatePw.value = '';
+      gatePw.focus();
     }
   }
   gateBtn.onclick = tryUnlock;
   gatePw.addEventListener('keydown', e=>{ if(e.key==='Enter') tryUnlock(); });
 
-  // Stay unlocked for the rest of this browser tab session
-  if(sessionStorage.getItem('zt_unlocked') === '1'){
-    gateScreen.style.display = 'none';
-    appRoot.style.display = 'block';
-    window.dispatchEvent(new Event('resize'));
-  } else {
-    gatePw.focus();
+  async function trySetup(){
+    clearGateMessages();
+    const pw1 = gateNewPw.value, pw2 = gateNewPw2.value;
+    if(pw1.length < 4){ gateErr.textContent = 'Use at least 4 characters.'; return; }
+    if(pw1 !== pw2){ gateErr.textContent = "Passwords don't match."; return; }
+    localStorage.setItem(GATE_HASH_KEY, await hashPassword(pw1));
+    notifyAccess('password_set');
+    enterApp();
   }
+  gateSetupBtn.onclick = trySetup;
+  gateNewPw2.addEventListener('keydown', e=>{ if(e.key==='Enter') trySetup(); });
+
+  gateForgotBtn.onclick = ()=> showResetMode();
+  gateResetCancel.onclick = ()=> showLoginMode();
+  gateResetConfirm.onclick = ()=>{
+    localStorage.removeItem(GATE_HASH_KEY);
+    showSetupMode();
+  };
+
+  // ---- Change password (used from inside the unlocked app) ----
+  function openChangePasswordModal(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'at-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="at-modal">
+        <h3>Change password</h3>
+        <label>Current password</label>
+        <input type="password" class="at-input" id="cpCurrent" autocomplete="current-password" />
+        <label>New password</label>
+        <input type="password" class="at-input" id="cpNew" autocomplete="new-password" />
+        <label>Confirm new password</label>
+        <input type="password" class="at-input" id="cpNew2" autocomplete="new-password" />
+        <div style="color:var(--danger); font-size:11.5px; min-height:14px; margin-top:10px;" id="cpErr"></div>
+        <div class="at-modal-actions">
+          <button class="at-btn ghost" id="cpCancel">Cancel</button>
+          <button class="at-btn primary" id="cpSave">Save password</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const cur = backdrop.querySelector('#cpCurrent');
+    const n1 = backdrop.querySelector('#cpNew');
+    const n2 = backdrop.querySelector('#cpNew2');
+    const err = backdrop.querySelector('#cpErr');
+    const cleanup = ()=> backdrop.remove();
+    backdrop.querySelector('#cpCancel').onclick = cleanup;
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop) cleanup(); });
+    backdrop.querySelector('#cpSave').onclick = async ()=>{
+      err.textContent = '';
+      const storedHash = localStorage.getItem(GATE_HASH_KEY);
+      const curHash = await hashPassword(cur.value || '');
+      if(curHash !== storedHash){ err.textContent = 'Current password is wrong.'; return; }
+      if(n1.value.length < 4){ err.textContent = 'New password must be at least 4 characters.'; return; }
+      if(n1.value !== n2.value){ err.textContent = "New passwords don't match."; return; }
+      localStorage.setItem(GATE_HASH_KEY, await hashPassword(n1.value));
+      notifyAccess('password_changed');
+      cleanup();
+    };
+    cur.focus();
+  }
+  const changePwBtn = document.getElementById('changePwBtn');
+  if(changePwBtn) changePwBtn.onclick = openChangePasswordModal;
+
+  const lockNowBtn = document.getElementById('lockNowBtn');
+  if(lockNowBtn){
+    lockNowBtn.onclick = ()=>{
+      sessionStorage.removeItem('zt_unlocked');
+      appRoot.style.display = 'none';
+      gateScreen.style.display = 'flex';
+      showLoginMode();
+    };
+  }
+
+  // ---- Boot ----
+  (async function bootGate(){
+    await migrateLegacyPasswordIfNeeded();
+    const hasPassword = !!localStorage.getItem(GATE_HASH_KEY);
+    if(hasPassword && sessionStorage.getItem('zt_unlocked') === '1'){
+      enterApp();
+    } else if(!hasPassword){
+      showSetupMode();
+    } else {
+      showLoginMode();
+    }
+  })();
 
   // Register service worker for PWA installability
   if('serviceWorker' in navigator){
@@ -3187,6 +3526,7 @@
       navigator.serviceWorker.register('sw.js').catch(()=>{});
     });
   }
+})();
 </script>
 </body>
 </html>
