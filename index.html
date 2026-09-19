@@ -3258,11 +3258,11 @@
       color: "var(--dol-starfall)",
       variants: {
         "Enchanting Void": { price: 10 },
-        "Invincible Sun": { price: 10, trait: { key: "infrasonic", label: "Infrasonic" } },
+        "Invincible Sun": { price: 10, trait: { key: "infrasonic", label: "Infrasonic", bumpTo: 12 } },
         "Mini Feaster": { price: 10 },
         "Mini Wonder": { price: 10 },
         "Polar Jelly": { price: 10 },
-        "Voodoo Doll": { price: 10, trait: { key: "fluffy", label: "Fluffy" } },
+        "Voodoo Doll": { price: 10, trait: { key: "fluffy", label: "Fluffy", bumpTo: 12 } },
       }
     }
   };
@@ -3317,11 +3317,14 @@
     vialPreview.innerHTML = vialSVG(color);
 
     if (data.trait) {
+      const bumpNote = data.trait.bumpTo ? ` (${data.trait.bumpTo}M)` : "";
       traitCheckboxes.innerHTML = `
         <div class="dol-trait-row">
           <input type="checkbox" id="dolTraitFlag">
-          <label for="dolTraitFlag">${data.trait.label}</label>
+          <label for="dolTraitFlag">${data.trait.label}${bumpNote}</label>
         </div>`;
+      const traitFlagEl = document.getElementById("dolTraitFlag");
+      if (traitFlagEl) traitFlagEl.addEventListener("change", updateUnitPrice);
     } else {
       traitCheckboxes.innerHTML = "";
     }
@@ -3332,6 +3335,10 @@
   function getEffectiveUnitPrice() {
     const { variant, data } = currentVariantData();
     if (data.bumpTo && variant === "Rebecca") return data.bumpTo;
+    if (data.trait && data.trait.bumpTo) {
+      const traitFlagEl = document.getElementById("dolTraitFlag");
+      if (traitFlagEl && traitFlagEl.checked) return data.trait.bumpTo;
+    }
     return data.price;
   }
 
