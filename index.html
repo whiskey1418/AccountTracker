@@ -638,6 +638,7 @@
   #dolView .dol-order-item .dol-info{flex:1;}
   #dolView .dol-order-item .dol-name{font-weight:600;font-size:0.9rem;}
   #dolView .dol-order-item .dol-meta{color:var(--dol-muted);font-size:0.78rem;margin-top:2px;}
+  #dolView .dol-order-item .dol-timestamp{color:var(--dol-muted);font-size:0.72rem;margin-top:2px;opacity:0.75;}
   #dolView .dol-order-item .dol-price{color:var(--dol-accent-gold);font-weight:700;font-size:0.9rem;white-space:nowrap;}
   #dolView .dol-order-item .dol-remove{
     background:none;border:none;color:var(--dol-muted);cursor:pointer;font-size:0.9rem; padding:2px 6px;
@@ -700,6 +701,15 @@
     border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;
   }
   #dolView .dol-delivery-delete-btn:hover{color:var(--dol-lunar);border-color:var(--dol-lunar);}
+  #dolView .dol-customer-group{margin-bottom:18px;}
+  #dolView .dol-customer-group:last-child{margin-bottom:0;}
+  #dolView .dol-customer-header{
+    display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;
+    padding:0 2px 6px;margin-bottom:8px;border-bottom:1px solid var(--dol-accent-purple);
+  }
+  #dolView .dol-customer-name{font-weight:700;font-size:0.9rem;color:var(--dol-accent-purple);}
+  #dolView .dol-customer-name .dol-customer-count{color:var(--dol-muted);font-weight:400;font-size:0.75rem;margin-left:4px;}
+  #dolView .dol-customer-total{font-weight:700;font-size:0.8rem;color:var(--dol-accent-gold);}
 </style>
 
   <style>
@@ -951,6 +961,8 @@
 
           <div class="dol-col dol-card">
             <h3>Current order</h3>
+            <label for="dolCustomerName">Customer name</label>
+            <input type="text" id="dolCustomerName" placeholder="e.g. Discord username">
             <div id="dolOrderList"><div class="dol-order-empty">No items added yet.</div></div>
             <div class="dol-order-total-row">
               <span>Order total</span>
@@ -3317,18 +3329,26 @@
   const COUNT_STORAGE_KEY = "deviant_order_ledger_count";
   const DRAFT_KEY = "deviant_order_ledger_draft"; // in-progress order, so closing the app mid-build doesn't lose it
   const DELIVERIES_KEY = "deviant_order_ledger_deliveries"; // confirmed orders waiting on / done with delivery
+  const CUSTOMER_DRAFT_KEY = "deviant_order_ledger_customer_draft"; // name typed in for the in-progress order
 
   let totalIncome = Number(localStorage.getItem(STORAGE_KEY)) || 0;
   let totalOrders = Number(localStorage.getItem(COUNT_STORAGE_KEY)) || 0;
   let currentOrder = []; // { category, variant, unitPrice, qty, traitNote, traitFlag, traitFlagLabel, color }
-  let deliveries = []; // { id, items[], total, confirmedAt, status: 'to_deliver'|'delivered', deliveredAt }
+  let deliveries = []; // { id, items[], total, confirmedAt, status: 'to_deliver'|'delivered', deliveredAt, customerName }
   let deliveryFilter = 'to_deliver';
+  let currentCustomerName = "";
 
   let wired = false;
   let categorySelect, variantSelect, vialPreview, traitCheckboxes, requestedTrait,
       quantityInput, unitPriceDisplay, addBtn, orderList, orderTotalDisplay,
       confirmBtn, totalIncomeDisplay, totalOrdersDisplay, resetBtn,
-      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn;
+      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn, customerNameInput;
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+  }
 
   function loadDraft(){
     try{
@@ -3348,14 +3368,21 @@
   function saveDeliveries(){
     try{ localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries)); }catch(e){ console.error('deliveries save failed', e); }
   }
-  function makeDeliveryRecord(items){
+  function loadCustomerDraft(){
+    try{ currentCustomerName = localStorage.getItem(CUSTOMER_DRAFT_KEY) || ""; }catch(e){ currentCustomerName = ""; }
+  }
+  function saveCustomerDraft(){
+    try{ localStorage.setItem(CUSTOMER_DRAFT_KEY, currentCustomerName); }catch(e){ console.error('customer draft save failed', e); }
+  }
+  function makeDeliveryRecord(items, customerName){
     return {
       id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
       items: items.map(i => ({ ...i })),
       total: items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0),
       confirmedAt: Date.now(),
       status: 'to_deliver',
-      deliveredAt: null
+      deliveredAt: null,
+      customerName: (customerName || "").trim()
     };
   }
 
@@ -3427,7 +3454,7 @@
   }
 
   function addOrderItem(item) {
-    currentOrder.push(item);
+    currentOrder.push({ ...item, addedAt: Date.now() });
     saveDraft();
     renderOrder();
   }
@@ -3442,12 +3469,14 @@
         if (item.traitFlag) notes.push(item.traitFlagLabel);
         if (item.traitNote) notes.push(`"${item.traitNote}"`);
         const metaText = [`x${item.qty}`, ...notes].join(" · ");
+        const addedLabel = item.addedAt ? new Date(item.addedAt).toLocaleString() : "";
         return `
           <div class="dol-order-item">
             <div class="dol-vial-mini">${vialSVG(item.color, 28)}</div>
             <div class="dol-info">
               <div class="dol-name">${item.category} — ${item.variant}</div>
               <div class="dol-meta">${metaText}</div>
+              ${addedLabel ? `<div class="dol-timestamp">Added ${addedLabel}</div>` : ""}
             </div>
             <div class="dol-price">${lineTotal}M</div>
             <div class="dol-actions">
@@ -3480,7 +3509,7 @@
         totalOrders += 1;
         saveIncome();
         renderIncome();
-        deliveries.unshift(makeDeliveryRecord([item]));
+        deliveries.unshift(makeDeliveryRecord([item], currentCustomerName));
         saveDeliveries();
         renderDeliveries();
         currentOrder.splice(idx, 1);
@@ -3511,37 +3540,59 @@
       return;
     }
 
-    deliveriesList.innerHTML = filtered.map(rec => {
-      const itemsHtml = rec.items.map(item => {
-        const notes = [];
-        if (item.traitFlag) notes.push(item.traitFlagLabel);
-        if (item.traitNote) notes.push(`"${item.traitNote}"`);
-        const metaText = [`x${item.qty}`, ...notes].join(" · ");
+    // Group records by customer so each customer's orders sit together,
+    // in the order that customer's most recent record appears.
+    const groupOrder = [];
+    const groups = {};
+    filtered.forEach(rec => {
+      const key = rec.customerName && rec.customerName.trim() ? rec.customerName.trim() : "Unknown customer";
+      if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+      groups[key].push(rec);
+    });
+
+    deliveriesList.innerHTML = groupOrder.map(name => {
+      const recs = groups[name];
+      const groupTotal = recs.reduce((sum, r) => sum + r.total, 0);
+      const recordsHtml = recs.map(rec => {
+        const itemsHtml = rec.items.map(item => {
+          const notes = [];
+          if (item.traitFlag) notes.push(item.traitFlagLabel);
+          if (item.traitNote) notes.push(`"${item.traitNote}"`);
+          const metaText = [`x${item.qty}`, ...notes].join(" · ");
+          return `
+            <div class="dol-order-item">
+              <div class="dol-vial-mini">${vialSVG(item.color, 24)}</div>
+              <div class="dol-info">
+                <div class="dol-name">${item.category} — ${item.variant}</div>
+                <div class="dol-meta">${metaText}</div>
+              </div>
+              <div class="dol-price">${item.unitPrice * item.qty}M</div>
+            </div>`;
+        }).join("");
+        const dateLabel = rec.status === 'delivered'
+          ? `Delivered ${new Date(rec.deliveredAt).toLocaleString()}`
+          : `Confirmed ${new Date(rec.confirmedAt).toLocaleString()}`;
+        const actionBtn = rec.status === 'to_deliver'
+          ? `<button type="button" class="dol-deliver-btn" data-id="${rec.id}">Mark delivered</button>`
+          : `<button type="button" class="dol-undeliver-btn" data-id="${rec.id}">Undo</button>`;
         return `
-          <div class="dol-order-item">
-            <div class="dol-vial-mini">${vialSVG(item.color, 24)}</div>
-            <div class="dol-info">
-              <div class="dol-name">${item.category} — ${item.variant}</div>
-              <div class="dol-meta">${metaText}</div>
+          <div class="dol-delivery-record ${rec.status}">
+            <div class="dol-delivery-items">${itemsHtml}</div>
+            <div class="dol-delivery-footer">
+              <span class="dol-delivery-date">${dateLabel}</span>
+              <span class="dol-delivery-total">${rec.total}M</span>
+              ${actionBtn}
+              <button type="button" class="dol-delivery-delete-btn" data-id="${rec.id}" title="Delete this record">Delete</button>
             </div>
-            <div class="dol-price">${item.unitPrice * item.qty}M</div>
           </div>`;
       }).join("");
-      const dateLabel = rec.status === 'delivered'
-        ? `Delivered ${new Date(rec.deliveredAt).toLocaleString()}`
-        : `Confirmed ${new Date(rec.confirmedAt).toLocaleString()}`;
-      const actionBtn = rec.status === 'to_deliver'
-        ? `<button type="button" class="dol-deliver-btn" data-id="${rec.id}">Mark delivered</button>`
-        : `<button type="button" class="dol-undeliver-btn" data-id="${rec.id}">Undo</button>`;
       return `
-        <div class="dol-delivery-record ${rec.status}">
-          <div class="dol-delivery-items">${itemsHtml}</div>
-          <div class="dol-delivery-footer">
-            <span class="dol-delivery-date">${dateLabel}</span>
-            <span class="dol-delivery-total">${rec.total}M</span>
-            ${actionBtn}
-            <button type="button" class="dol-delivery-delete-btn" data-id="${rec.id}" title="Delete this record">Delete</button>
+        <div class="dol-customer-group">
+          <div class="dol-customer-header">
+            <span class="dol-customer-name">${escapeHtml(name)}<span class="dol-customer-count">${recs.length} order${recs.length === 1 ? '' : 's'}</span></span>
+            <span class="dol-customer-total">${groupTotal}M</span>
           </div>
+          ${recordsHtml}
         </div>`;
     }).join("");
 
@@ -3614,18 +3665,28 @@
       if (traitFlagEl) traitFlagEl.checked = false;
     });
 
+    if (customerNameInput) {
+      customerNameInput.addEventListener("input", () => {
+        currentCustomerName = customerNameInput.value;
+        saveCustomerDraft();
+      });
+    }
+
     confirmBtn.addEventListener("click", () => {
       const orderTotal = currentOrder.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
       totalIncome += orderTotal;
       totalOrders += 1;
       saveIncome();
       renderIncome();
-      deliveries.unshift(makeDeliveryRecord(currentOrder));
+      deliveries.unshift(makeDeliveryRecord(currentOrder, currentCustomerName));
       saveDeliveries();
       renderDeliveries();
       currentOrder = [];
       saveDraft();
       renderOrder();
+      currentCustomerName = "";
+      saveCustomerDraft();
+      if (customerNameInput) customerNameInput.value = "";
     });
 
     tabPendingBtn.onclick = () => {
@@ -3687,11 +3748,14 @@
     pendingCountEl = document.getElementById("dolPendingCount");
     tabPendingBtn = document.getElementById("dolTabPending");
     tabDeliveredBtn = document.getElementById("dolTabDelivered");
+    customerNameInput = document.getElementById("dolCustomerName");
 
     if (!categorySelect) return; // ledger markup not on this page
 
     loadDraft();
     loadDeliveries();
+    loadCustomerDraft();
+    if (customerNameInput) customerNameInput.value = currentCustomerName;
     wireOnce();
     populateCategories();
     populateVariants();      // -> calls updateForVariant() internally
