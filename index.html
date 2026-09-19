@@ -695,6 +695,11 @@
     border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;
   }
   #dolView .dol-undeliver-btn:hover{color:var(--dol-text);border-color:var(--dol-text);}
+  #dolView .dol-delivery-delete-btn{
+    background:transparent;color:var(--dol-muted);border:1px solid var(--dol-border);padding:6px 10px;
+    border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  #dolView .dol-delivery-delete-btn:hover{color:var(--dol-lunar);border-color:var(--dol-lunar);}
 </style>
 
   <style>
@@ -3535,6 +3540,7 @@
             <span class="dol-delivery-date">${dateLabel}</span>
             <span class="dol-delivery-total">${rec.total}M</span>
             ${actionBtn}
+            <button type="button" class="dol-delivery-delete-btn" data-id="${rec.id}" title="Delete this record">Delete</button>
           </div>
         </div>`;
     }).join("");
@@ -3555,6 +3561,14 @@
         if(!rec) return;
         rec.status = 'to_deliver';
         rec.deliveredAt = null;
+        saveDeliveries();
+        renderDeliveries();
+      });
+    });
+    deliveriesList.querySelectorAll(".dol-delivery-delete-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if(!confirm('Delete this delivery record? This cannot be undone.')) return;
+        deliveries = deliveries.filter(d => d.id !== btn.dataset.id);
         saveDeliveries();
         renderDeliveries();
       });
