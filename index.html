@@ -667,6 +667,13 @@
   #dolView .dol-confirm-btn:disabled{opacity:0.45;cursor:not-allowed;}
   #dolView h3{margin:0 0 4px;font-size:1rem;}
   #dolView .dol-current-customer{color:var(--dol-accent-purple);font-size:0.8rem;font-weight:700;margin-bottom:10px;min-height:1em;}
+  #dolView .dol-draft-customers{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px;}
+  #dolView .dol-draft-chip{
+    background:transparent;border:1px solid var(--dol-border);color:var(--dol-muted);
+    padding:4px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  #dolView .dol-draft-chip:hover{color:var(--dol-text);border-color:var(--dol-text);}
+  #dolView .dol-draft-chip.active{border-color:var(--dol-accent-purple);color:var(--dol-accent-purple);background:rgba(139,110,240,0.12);}
   #dolView .dol-deliveries-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
   #dolView .dol-deliveries-toggle{display:flex;gap:6px;}
   #dolView .dol-dtab{
@@ -938,6 +945,7 @@
 
             <label for="dolCustomerName">Customer name</label>
             <input type="text" id="dolCustomerName" placeholder="e.g. Discord username">
+            <div class="dol-draft-customers" id="dolDraftCustomers"></div>
 
             <label for="dolCategorySelect">Category</label>
             <select id="dolCategorySelect"></select>
@@ -3336,7 +3344,7 @@
 
   let totalIncome = Number(localStorage.getItem(STORAGE_KEY)) || 0;
   let totalOrders = Number(localStorage.getItem(COUNT_STORAGE_KEY)) || 0;
-  let currentOrder = []; // { category, variant, unitPrice, qty, traitNote, traitFlag, traitFlagLabel, color }
+  let draftOrders = {}; // { customerKey: items[] } — one in-progress order per customer
   let deliveries = []; // { id, items[], total, confirmedAt, status: 'to_deliver'|'delivered', deliveredAt, customerName }
   let deliveryFilter = 'to_deliver';
   let currentCustomerName = "";
@@ -3345,7 +3353,8 @@
   let categorySelect, variantSelect, vialPreview, traitCheckboxes, requestedTrait,
       quantityInput, unitPriceDisplay, addBtn, orderList, orderTotalDisplay,
       confirmBtn, totalIncomeDisplay, totalOrdersDisplay, resetBtn,
-      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn, customerNameInput, currentCustomerDisplay;
+      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn, customerNameInput,
+      currentCustomerDisplay, draftCustomersEl;
 
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, (c) => ({
@@ -3353,14 +3362,41 @@
     }[c]));
   }
 
+  // The customer name currently typed in the "New order" field decides which
+  // customer's in-progress order is active. Each customer keeps their own
+  // separate item list until confirmed, so switching names never mixes orders.
+  function activeKey(){ return (currentCustomerName || "").trim(); }
+  function getActiveOrder(){
+    const k = activeKey();
+    if (!draftOrders[k]) draftOrders[k] = [];
+    return draftOrders[k];
+  }
+  function getActiveOrderReadOnly(){
+    return draftOrders[activeKey()] || [];
+  }
+
   function loadDraft(){
     try{
       const raw = localStorage.getItem(DRAFT_KEY);
-      currentOrder = raw ? JSON.parse(raw) : [];
-    }catch(e){ currentOrder = []; }
+      if (!raw) { draftOrders = {}; return; }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // migrate from the old single-order draft format
+        draftOrders = parsed.length ? { "": parsed } : {};
+      } else if (parsed && typeof parsed === "object") {
+        draftOrders = parsed;
+      } else {
+        draftOrders = {};
+      }
+    }catch(e){ draftOrders = {}; }
   }
   function saveDraft(){
-    try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(currentOrder)); }catch(e){ console.error('draft save failed', e); }
+    try{
+      Object.keys(draftOrders).forEach(k => {
+        if (!draftOrders[k] || draftOrders[k].length === 0) delete draftOrders[k];
+      });
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftOrders));
+    }catch(e){ console.error('draft save failed', e); }
   }
   function loadDeliveries(){
     try{
@@ -3463,16 +3499,42 @@
   }
 
   function addOrderItem(item) {
-    currentOrder.push({ ...item, addedAt: Date.now() });
+    const items = getActiveOrder();
+    items.push({ ...item, addedAt: Date.now() });
     saveDraft();
     renderOrder();
+    renderDraftCustomerChips();
+  }
+
+  function renderDraftCustomerChips(){
+    if (!draftCustomersEl) return;
+    const keys = Object.keys(draftOrders).filter(k => draftOrders[k] && draftOrders[k].length > 0);
+    if (keys.length === 0) { draftCustomersEl.innerHTML = ""; return; }
+    const active = activeKey();
+    draftCustomersEl.innerHTML = keys.map(k => {
+      const label = k ? escapeHtml(k) : "Unnamed";
+      const count = draftOrders[k].length;
+      const isActive = k === active;
+      return `<button type="button" class="dol-draft-chip${isActive ? ' active' : ''}" data-key="${escapeHtml(k)}">${label} (${count})</button>`;
+    }).join("");
+    draftCustomersEl.querySelectorAll(".dol-draft-chip").forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentCustomerName = btn.dataset.key;
+        saveCustomerDraft();
+        if (customerNameInput) customerNameInput.value = currentCustomerName;
+        updateCurrentCustomerDisplay();
+        renderOrder();
+        renderDraftCustomerChips();
+      });
+    });
   }
 
   function renderOrder() {
-    if (currentOrder.length === 0) {
+    const items = getActiveOrderReadOnly();
+    if (items.length === 0) {
       orderList.innerHTML = `<div class="dol-order-empty">No items added yet.</div>`;
     } else {
-      orderList.innerHTML = currentOrder.map((item, idx) => {
+      orderList.innerHTML = items.map((item, idx) => {
         const lineTotal = item.unitPrice * item.qty;
         const notes = [];
         if (item.traitFlag) notes.push(item.traitFlagLabel);
@@ -3497,33 +3559,37 @@
       }).join("");
     }
 
-    const orderTotal = currentOrder.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
+    const orderTotal = items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
     orderTotalDisplay.textContent = orderTotal + "M";
-    confirmBtn.disabled = currentOrder.length === 0;
+    confirmBtn.disabled = items.length === 0;
 
     orderList.querySelectorAll(".dol-remove").forEach(btn => {
       btn.addEventListener("click", () => {
-        currentOrder.splice(Number(btn.dataset.idx), 1);
+        const arr = getActiveOrder();
+        arr.splice(Number(btn.dataset.idx), 1);
         saveDraft();
         renderOrder();
+        renderDraftCustomerChips();
       });
     });
 
     orderList.querySelectorAll(".dol-confirm-item").forEach(btn => {
       btn.addEventListener("click", () => {
         const idx = Number(btn.dataset.idx);
-        const item = currentOrder[idx];
+        const arr = getActiveOrder();
+        const item = arr[idx];
         const lineTotal = item.unitPrice * item.qty;
         totalIncome += lineTotal;
         totalOrders += 1;
         saveIncome();
         renderIncome();
-        deliveries.unshift(makeDeliveryRecord([item], currentCustomerName));
+        deliveries.unshift(makeDeliveryRecord([item], activeKey()));
         saveDeliveries();
         renderDeliveries();
-        currentOrder.splice(idx, 1);
+        arr.splice(idx, 1);
         saveDraft();
         renderOrder();
+        renderDraftCustomerChips();
       });
     });
 
@@ -3532,7 +3598,7 @@
     orderList.querySelectorAll(".dol-duplicate").forEach(btn => {
       btn.addEventListener("click", () => {
         const idx = Number(btn.dataset.idx);
-        const item = currentOrder[idx];
+        const item = getActiveOrderReadOnly()[idx];
         addOrderItem({ ...item });
       });
     });
@@ -3679,25 +3745,31 @@
         currentCustomerName = customerNameInput.value;
         saveCustomerDraft();
         updateCurrentCustomerDisplay();
+        renderOrder();
+        renderDraftCustomerChips();
       });
     }
 
     confirmBtn.addEventListener("click", () => {
-      const orderTotal = currentOrder.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
+      const k = activeKey();
+      const items = draftOrders[k] || [];
+      if (items.length === 0) return;
+      const orderTotal = items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
       totalIncome += orderTotal;
       totalOrders += 1;
       saveIncome();
       renderIncome();
-      deliveries.unshift(makeDeliveryRecord(currentOrder, currentCustomerName));
+      deliveries.unshift(makeDeliveryRecord(items, k));
       saveDeliveries();
       renderDeliveries();
-      currentOrder = [];
+      delete draftOrders[k];
       saveDraft();
-      renderOrder();
       currentCustomerName = "";
       saveCustomerDraft();
       if (customerNameInput) customerNameInput.value = "";
       updateCurrentCustomerDisplay();
+      renderOrder();
+      renderDraftCustomerChips();
     });
 
     tabPendingBtn.onclick = () => {
@@ -3731,8 +3803,10 @@
         totalOrders = 0;
         saveIncome();
         renderIncome();
-        currentOrder = [];
+        draftOrders = {};
+        saveDraft();
         renderOrder();
+        renderDraftCustomerChips();
         resetConfirming = false;
         resetBtn.textContent = "Reset";
         resetBtn.classList.remove("confirming");
@@ -3761,6 +3835,7 @@
     tabDeliveredBtn = document.getElementById("dolTabDelivered");
     customerNameInput = document.getElementById("dolCustomerName");
     currentCustomerDisplay = document.getElementById("dolCurrentCustomerDisplay");
+    draftCustomersEl = document.getElementById("dolDraftCustomers");
 
     if (!categorySelect) return; // ledger markup not on this page
 
@@ -3775,6 +3850,7 @@
     renderIncome();
     renderOrder();
     renderDeliveries();
+    renderDraftCustomerChips();
   }
 
   // Bridge for the Orders tab: it lives as a third sub-tab there now
