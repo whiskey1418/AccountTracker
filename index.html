@@ -666,6 +666,7 @@
   }
   #dolView .dol-confirm-btn:disabled{opacity:0.45;cursor:not-allowed;}
   #dolView h3{margin:0 0 4px;font-size:1rem;}
+  #dolView .dol-current-customer{color:var(--dol-accent-purple);font-size:0.8rem;font-weight:700;margin-bottom:10px;min-height:1em;}
   #dolView .dol-deliveries-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
   #dolView .dol-deliveries-toggle{display:flex;gap:6px;}
   #dolView .dol-dtab{
@@ -964,6 +965,7 @@
 
           <div class="dol-col dol-card">
             <h3>Current order</h3>
+            <div class="dol-current-customer" id="dolCurrentCustomerDisplay"></div>
             <div id="dolOrderList"><div class="dol-order-empty">No items added yet.</div></div>
             <div class="dol-order-total-row">
               <span>Order total</span>
@@ -3343,7 +3345,7 @@
   let categorySelect, variantSelect, vialPreview, traitCheckboxes, requestedTrait,
       quantityInput, unitPriceDisplay, addBtn, orderList, orderTotalDisplay,
       confirmBtn, totalIncomeDisplay, totalOrdersDisplay, resetBtn,
-      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn, customerNameInput;
+      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn, customerNameInput, currentCustomerDisplay;
 
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, (c) => ({
@@ -3452,6 +3454,12 @@
 
   function updateUnitPrice() {
     unitPriceDisplay.textContent = getEffectiveUnitPrice() + "M";
+  }
+
+  function updateCurrentCustomerDisplay(){
+    if (!currentCustomerDisplay) return;
+    const name = (currentCustomerName || "").trim();
+    currentCustomerDisplay.textContent = name ? `For: ${name}` : "";
   }
 
   function addOrderItem(item) {
@@ -3670,6 +3678,7 @@
       customerNameInput.addEventListener("input", () => {
         currentCustomerName = customerNameInput.value;
         saveCustomerDraft();
+        updateCurrentCustomerDisplay();
       });
     }
 
@@ -3688,6 +3697,7 @@
       currentCustomerName = "";
       saveCustomerDraft();
       if (customerNameInput) customerNameInput.value = "";
+      updateCurrentCustomerDisplay();
     });
 
     tabPendingBtn.onclick = () => {
@@ -3750,6 +3760,7 @@
     tabPendingBtn = document.getElementById("dolTabPending");
     tabDeliveredBtn = document.getElementById("dolTabDelivered");
     customerNameInput = document.getElementById("dolCustomerName");
+    currentCustomerDisplay = document.getElementById("dolCurrentCustomerDisplay");
 
     if (!categorySelect) return; // ledger markup not on this page
 
@@ -3757,6 +3768,7 @@
     loadDeliveries();
     loadCustomerDraft();
     if (customerNameInput) customerNameInput.value = currentCustomerName;
+    updateCurrentCustomerDisplay();
     wireOnce();
     populateCategories();
     populateVariants();      // -> calls updateForVariant() internally
