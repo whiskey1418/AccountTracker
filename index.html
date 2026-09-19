@@ -665,6 +665,36 @@
   }
   #dolView .dol-confirm-btn:disabled{opacity:0.45;cursor:not-allowed;}
   #dolView h3{margin:0 0 4px;font-size:1rem;}
+  #dolView .dol-deliveries-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+  #dolView .dol-deliveries-toggle{display:flex;gap:6px;}
+  #dolView .dol-dtab{
+    background:transparent;border:1px solid var(--dol-border);color:var(--dol-muted);
+    padding:6px 12px;border-radius:999px;font-size:0.78rem;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  #dolView .dol-dtab.active{border-color:var(--dol-accent-purple);color:var(--dol-accent-purple);background:rgba(139,110,240,0.12);}
+  #dolView .dol-dtab .dol-count-badge{color:var(--dol-accent-gold);margin-left:2px;}
+  #dolView .dol-delivery-record{
+    border:1px solid var(--dol-border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#1c1829;
+  }
+  #dolView .dol-delivery-record.delivered{opacity:0.65;}
+  #dolView .dol-delivery-record:last-child{margin-bottom:0;}
+  #dolView .dol-delivery-items .dol-order-item{padding:6px 0;}
+  #dolView .dol-delivery-footer{
+    display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+    padding-top:8px;margin-top:6px;border-top:1px solid var(--dol-border);
+  }
+  #dolView .dol-delivery-date{color:var(--dol-muted);font-size:0.75rem;}
+  #dolView .dol-delivery-total{color:var(--dol-accent-gold);font-weight:700;font-size:0.85rem;}
+  #dolView .dol-deliver-btn{
+    background:var(--dol-accent-purple);color:#1b1330;border:none;padding:6px 12px;
+    border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  #dolView .dol-deliver-btn:hover{opacity:0.9;}
+  #dolView .dol-undeliver-btn{
+    background:transparent;color:var(--dol-muted);border:1px solid var(--dol-border);padding:6px 12px;
+    border-radius:6px;font-size:0.75rem;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  #dolView .dol-undeliver-btn:hover{color:var(--dol-text);border-color:var(--dol-text);}
 </style>
 
   <style>
@@ -923,6 +953,17 @@
             </div>
             <button class="dol-confirm-btn" id="dolConfirmBtn" disabled>Confirm order &amp; add to income</button>
           </div>
+        </div>
+
+        <div class="dol-card">
+          <div class="dol-deliveries-header">
+            <h3>Deliveries</h3>
+            <div class="dol-deliveries-toggle">
+              <button type="button" class="dol-dtab active" id="dolTabPending">To deliver <span class="dol-count-badge" id="dolPendingCount"></span></button>
+              <button type="button" class="dol-dtab" id="dolTabDelivered">Delivered</button>
+            </div>
+          </div>
+          <div id="dolDeliveriesList"><div class="dol-order-empty">Nothing here yet.</div></div>
         </div>
       </div>
     </div>
@@ -3269,15 +3310,49 @@
 
   const STORAGE_KEY = "deviant_order_ledger_income";
   const COUNT_STORAGE_KEY = "deviant_order_ledger_count";
+  const DRAFT_KEY = "deviant_order_ledger_draft"; // in-progress order, so closing the app mid-build doesn't lose it
+  const DELIVERIES_KEY = "deviant_order_ledger_deliveries"; // confirmed orders waiting on / done with delivery
 
   let totalIncome = Number(localStorage.getItem(STORAGE_KEY)) || 0;
   let totalOrders = Number(localStorage.getItem(COUNT_STORAGE_KEY)) || 0;
   let currentOrder = []; // { category, variant, unitPrice, qty, traitNote, traitFlag, traitFlagLabel, color }
+  let deliveries = []; // { id, items[], total, confirmedAt, status: 'to_deliver'|'delivered', deliveredAt }
+  let deliveryFilter = 'to_deliver';
 
   let wired = false;
   let categorySelect, variantSelect, vialPreview, traitCheckboxes, requestedTrait,
       quantityInput, unitPriceDisplay, addBtn, orderList, orderTotalDisplay,
-      confirmBtn, totalIncomeDisplay, totalOrdersDisplay, resetBtn;
+      confirmBtn, totalIncomeDisplay, totalOrdersDisplay, resetBtn,
+      deliveriesList, pendingCountEl, tabPendingBtn, tabDeliveredBtn;
+
+  function loadDraft(){
+    try{
+      const raw = localStorage.getItem(DRAFT_KEY);
+      currentOrder = raw ? JSON.parse(raw) : [];
+    }catch(e){ currentOrder = []; }
+  }
+  function saveDraft(){
+    try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(currentOrder)); }catch(e){ console.error('draft save failed', e); }
+  }
+  function loadDeliveries(){
+    try{
+      const raw = localStorage.getItem(DELIVERIES_KEY);
+      deliveries = raw ? JSON.parse(raw) : [];
+    }catch(e){ deliveries = []; }
+  }
+  function saveDeliveries(){
+    try{ localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries)); }catch(e){ console.error('deliveries save failed', e); }
+  }
+  function makeDeliveryRecord(items){
+    return {
+      id: 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      items: items.map(i => ({ ...i })),
+      total: items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0),
+      confirmedAt: Date.now(),
+      status: 'to_deliver',
+      deliveredAt: null
+    };
+  }
 
   function vialSVG(color, size = 90) {
     return `
@@ -3348,6 +3423,7 @@
 
   function addOrderItem(item) {
     currentOrder.push(item);
+    saveDraft();
     renderOrder();
   }
 
@@ -3385,6 +3461,7 @@
     orderList.querySelectorAll(".dol-remove").forEach(btn => {
       btn.addEventListener("click", () => {
         currentOrder.splice(Number(btn.dataset.idx), 1);
+        saveDraft();
         renderOrder();
       });
     });
@@ -3398,7 +3475,11 @@
         totalOrders += 1;
         saveIncome();
         renderIncome();
+        deliveries.unshift(makeDeliveryRecord([item]));
+        saveDeliveries();
+        renderDeliveries();
         currentOrder.splice(idx, 1);
+        saveDraft();
         renderOrder();
       });
     });
@@ -3410,6 +3491,72 @@
         const idx = Number(btn.dataset.idx);
         const item = currentOrder[idx];
         addOrderItem({ ...item });
+      });
+    });
+  }
+
+  function renderDeliveries(){
+    if(!deliveriesList) return;
+    const pendingCount = deliveries.filter(d => d.status === 'to_deliver').length;
+    if(pendingCountEl) pendingCountEl.textContent = pendingCount ? String(pendingCount) : '';
+
+    const filtered = deliveries.filter(d => d.status === deliveryFilter);
+    if(filtered.length === 0){
+      deliveriesList.innerHTML = `<div class="dol-order-empty">${deliveryFilter === 'to_deliver' ? 'Nothing waiting on delivery.' : 'No delivered orders yet.'}</div>`;
+      return;
+    }
+
+    deliveriesList.innerHTML = filtered.map(rec => {
+      const itemsHtml = rec.items.map(item => {
+        const notes = [];
+        if (item.traitFlag) notes.push(item.traitFlagLabel);
+        if (item.traitNote) notes.push(`"${item.traitNote}"`);
+        const metaText = [`x${item.qty}`, ...notes].join(" · ");
+        return `
+          <div class="dol-order-item">
+            <div class="dol-vial-mini">${vialSVG(item.color, 24)}</div>
+            <div class="dol-info">
+              <div class="dol-name">${item.category} — ${item.variant}</div>
+              <div class="dol-meta">${metaText}</div>
+            </div>
+            <div class="dol-price">${item.unitPrice * item.qty}M</div>
+          </div>`;
+      }).join("");
+      const dateLabel = rec.status === 'delivered'
+        ? `Delivered ${new Date(rec.deliveredAt).toLocaleString()}`
+        : `Confirmed ${new Date(rec.confirmedAt).toLocaleString()}`;
+      const actionBtn = rec.status === 'to_deliver'
+        ? `<button type="button" class="dol-deliver-btn" data-id="${rec.id}">Mark delivered</button>`
+        : `<button type="button" class="dol-undeliver-btn" data-id="${rec.id}">Undo</button>`;
+      return `
+        <div class="dol-delivery-record ${rec.status}">
+          <div class="dol-delivery-items">${itemsHtml}</div>
+          <div class="dol-delivery-footer">
+            <span class="dol-delivery-date">${dateLabel}</span>
+            <span class="dol-delivery-total">${rec.total}M</span>
+            ${actionBtn}
+          </div>
+        </div>`;
+    }).join("");
+
+    deliveriesList.querySelectorAll(".dol-deliver-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const rec = deliveries.find(d => d.id === btn.dataset.id);
+        if(!rec) return;
+        rec.status = 'delivered';
+        rec.deliveredAt = Date.now();
+        saveDeliveries();
+        renderDeliveries();
+      });
+    });
+    deliveriesList.querySelectorAll(".dol-undeliver-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const rec = deliveries.find(d => d.id === btn.dataset.id);
+        if(!rec) return;
+        rec.status = 'to_deliver';
+        rec.deliveredAt = null;
+        saveDeliveries();
+        renderDeliveries();
       });
     });
   }
@@ -3459,9 +3606,26 @@
       totalOrders += 1;
       saveIncome();
       renderIncome();
+      deliveries.unshift(makeDeliveryRecord(currentOrder));
+      saveDeliveries();
+      renderDeliveries();
       currentOrder = [];
+      saveDraft();
       renderOrder();
     });
+
+    tabPendingBtn.onclick = () => {
+      deliveryFilter = 'to_deliver';
+      tabPendingBtn.classList.add('active');
+      tabDeliveredBtn.classList.remove('active');
+      renderDeliveries();
+    };
+    tabDeliveredBtn.onclick = () => {
+      deliveryFilter = 'delivered';
+      tabDeliveredBtn.classList.add('active');
+      tabPendingBtn.classList.remove('active');
+      renderDeliveries();
+    };
 
     let resetConfirming = false;
     let resetTimer = null;
@@ -3505,14 +3669,21 @@
     totalIncomeDisplay = document.getElementById("dolTotalIncome");
     totalOrdersDisplay = document.getElementById("dolTotalOrders");
     resetBtn = document.getElementById("dolResetBtn");
+    deliveriesList = document.getElementById("dolDeliveriesList");
+    pendingCountEl = document.getElementById("dolPendingCount");
+    tabPendingBtn = document.getElementById("dolTabPending");
+    tabDeliveredBtn = document.getElementById("dolTabDelivered");
 
     if (!categorySelect) return; // ledger markup not on this page
 
+    loadDraft();
+    loadDeliveries();
     wireOnce();
     populateCategories();
     populateVariants();      // -> calls updateForVariant() internally
     renderIncome();
     renderOrder();
+    renderDeliveries();
   }
 
   // Bridge for the Orders tab: it lives as a third sub-tab there now
