@@ -377,10 +377,11 @@
   .at-group-head.collapsed .at-group-chevron{transform:rotate(-90deg);}
   .at-group-delete{
     order:99; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
-    width:22px; height:22px; padding:0; border:1px solid var(--line); border-radius:6px;
-    background:var(--surface2); color:var(--muted); font-size:11px; cursor:pointer;
+    width:26px; height:26px; padding:0; border:1px solid var(--line); border-radius:7px;
+    background:var(--surface2); color:var(--muted); cursor:pointer;
     transition:color .15s ease, border-color .15s ease, background .15s ease;
   }
+  .at-group-delete svg{display:block;}
   .at-group-delete:hover{color:var(--danger); border-color:var(--danger); background:rgba(255,107,110,0.1);}
 
   /* ---- Modal ---- */
@@ -2719,7 +2720,7 @@
         groupDelBtn.className = 'at-group-delete';
         groupDelBtn.type = 'button';
         groupDelBtn.title = 'Delete this Steam login and all ' + list.length + ' account' + (list.length===1?'':'s') + ' on it';
-        groupDelBtn.textContent = '🗑';
+        groupDelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
         groupDelBtn.onclick = async (e)=>{
           e.stopPropagation();
           const ok = await showConfirm('Delete "'+key+'" and all '+list.length+' account'+(list.length===1?'':'s')+' on this Steam login? Any higher-numbered Steam logins will auto-shift down by one. This cannot be undone.', 'Delete login');
