@@ -375,6 +375,13 @@
     transform:rotate(0deg);
   }
   .at-group-head.collapsed .at-group-chevron{transform:rotate(-90deg);}
+  .at-group-delete{
+    order:99; flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; padding:0; border:1px solid var(--line); border-radius:6px;
+    background:var(--surface2); color:var(--muted); font-size:11px; cursor:pointer;
+    transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .at-group-delete:hover{color:var(--danger); border-color:var(--danger); background:rgba(255,107,110,0.1);}
 
   /* ---- Modal ---- */
   .at-modal-backdrop{
@@ -2136,6 +2143,30 @@
     const tmp = accounts[i1]; accounts[i1] = accounts[i2]; accounts[i2] = tmp;
   }
 
+  // Delete an entire Steam login group (every alt sharing that login) and,
+  // when the login was a numbered "Steam N" slot, auto-renumber every
+  // remaining higher-numbered login down by one so there's no gap left to
+  // fix by hand (e.g. deleting "Steam 7" turns "Steam 8" into "Steam 7").
+  // Only the leading "Steam N" number is touched — any " - name" suffix on
+  // each login is preserved as-is.
+  async function deleteSteamGroup(key){
+    accounts = accounts.filter(a=>(a.steamGroup ? a.steamGroup.trim() : '')!==key);
+    const m = key.match(/^Steam\s+(\d+)\b/i);
+    if(m){
+      const deletedNum = parseInt(m[1], 10);
+      accounts.forEach(a=>{
+        if(!a.steamGroup) return;
+        a.steamGroup = a.steamGroup.replace(/^Steam\s+(\d+)\b/i, (full, numStr)=>{
+          const n = parseInt(numStr, 10);
+          return n > deletedNum ? ('Steam ' + (n - 1)) : full;
+        });
+      });
+    }
+    collapsedGroups.delete(key);
+    await saveAccounts();
+    renderAll();
+  }
+
   function trackerNode(account, type){
     // type: 'relic' (daily) or 'ufo' (weekly)
     const shiftedNow = nowShifted();
@@ -2400,7 +2431,9 @@
     }
 
     const quickRow = document.createElement('div'); quickRow.className='at-el-quickrow';
-    [ {label:'+1k', amt:1000}, {label:'+5k', amt:5000}, {label:'+10k', amt:10000} ].forEach(q=>{
+    // Only small nudges here — "Mark inherited" already jumps points straight
+    // to the 20k cap, so +10k/Max chips would just be redundant/misleading.
+    [ {label:'+1k', amt:1000}, {label:'+5k', amt:5000} ].forEach(q=>{
       const chip = document.createElement('button');
       chip.className = 'at-quick-chip'; chip.type='button'; chip.textContent = q.label;
       chip.title = 'Add '+q.amt.toLocaleString()+' points to the running total';
@@ -2408,12 +2441,6 @@
       chip.onclick = ()=> commit(used + q.amt);
       quickRow.appendChild(chip);
     });
-    const maxChip = document.createElement('button');
-    maxChip.className = 'at-quick-chip max'; maxChip.type='button'; maxChip.textContent = 'Max';
-    maxChip.title = 'Set points straight to the '+POINTS_CAP.toLocaleString()+' cap';
-    maxChip.disabled = isFull;
-    maxChip.onclick = ()=> commit(POINTS_CAP);
-    quickRow.appendChild(maxChip);
 
     const manualToggle = document.createElement('div'); manualToggle.className='at-el-manual';
     manualToggle.innerHTML = '<span class="at-el-manual-label"><span class="at-el-manual-chevron">▸</span>Type exact amount</span>';
@@ -2684,6 +2711,22 @@
         if(collapsedGroups.has(key)) collapsedGroups.delete(key); else collapsedGroups.add(key);
         renderGrid();
       };
+      // Bulk-delete this whole Steam login (all its alts at once). Only
+      // shown for actual named logins — the "No Steam login" bucket isn't
+      // a real group to delete.
+      if(key){
+        const groupDelBtn = document.createElement('button');
+        groupDelBtn.className = 'at-group-delete';
+        groupDelBtn.type = 'button';
+        groupDelBtn.title = 'Delete this Steam login and all ' + list.length + ' account' + (list.length===1?'':'s') + ' on it';
+        groupDelBtn.textContent = '🗑';
+        groupDelBtn.onclick = async (e)=>{
+          e.stopPropagation();
+          const ok = await showConfirm('Delete "'+key+'" and all '+list.length+' account'+(list.length===1?'':'s')+' on this Steam login? Any higher-numbered Steam logins will auto-shift down by one. This cannot be undone.', 'Delete login');
+          if(ok) await deleteSteamGroup(key);
+        };
+        headEl.appendChild(groupDelBtn);
+      }
       const innerGrid = document.createElement('div');
       innerGrid.className = 'at-grid';
       if(isCollapsed) innerGrid.style.display = 'none';
