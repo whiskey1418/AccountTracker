@@ -335,6 +335,8 @@
   .at-quick-chip:active{transform:translateY(0); filter:brightness(0.92);}
   .at-quick-chip.max{color:var(--warn); border-color:rgba(255,180,84,0.3);}
   .at-quick-chip.max:hover{border-color:var(--warn); color:var(--warn);}
+  .at-quick-chip.reset-cd{color:var(--danger); border-color:rgba(255,107,110,0.3);}
+  .at-quick-chip.reset-cd:hover{border-color:var(--danger); color:var(--danger);}
   .at-quick-chip:disabled{opacity:.35; cursor:not-allowed; transform:none;}
   .at-el-manual{display:flex; align-items:center; justify-content:space-between; cursor:pointer; margin-bottom:6px;}
   .at-el-manual-label{
@@ -1062,6 +1064,7 @@
   const GC_WEEKLY_CAP = 10000; // reference point only — pool total can exceed this slightly (up to 10,500) since the 5th event still pays full
   const GC_FULL_RATE_EVENTS = 5; // first N events each week earn full rate; everything after earns 0
   const INHERIT_COOLDOWN_MS = 7*24*3600*1000; // Inherit Deviant cooldown, 7 days
+  const POINTS_RESET_COOLDOWN_MS = 24*3600*1000; // Points "Reset" button cooldown, 1 day
   const EL_RESET_DAY = 3; // EL sold resets weekly on Wednesday (0=Sun...6=Sat)
   let searchQuery = '';
   let collapsedGroups = new Set();
@@ -2431,17 +2434,36 @@
       renderAll();
     }
 
+    // Reset drops points to 0 and starts a 1-day cooldown — matches the
+    // real workflow of pulling the account off DSCP for a day before
+    // bringing it back to inherit again, so it can't be spammed by mistake.
     const quickRow = document.createElement('div'); quickRow.className='at-el-quickrow';
-    // Only small nudges here — "Mark inherited" already jumps points straight
-    // to the 20k cap, so +10k/Max chips would just be redundant/misleading.
-    [ {label:'+1k', amt:1000}, {label:'+5k', amt:5000} ].forEach(q=>{
-      const chip = document.createElement('button');
-      chip.className = 'at-quick-chip'; chip.type='button'; chip.textContent = q.label;
-      chip.title = 'Add '+q.amt.toLocaleString()+' points to the running total';
-      chip.disabled = isFull;
-      chip.onclick = ()=> commit(used + q.amt);
-      quickRow.appendChild(chip);
-    });
+    const resetChip = document.createElement('button');
+    resetChip.className = 'at-quick-chip reset-cd'; resetChip.type='button';
+    quickRow.appendChild(resetChip);
+
+    function resetState(){
+      const now = Date.now();
+      const last = account.pointsResetAt || null;
+      const nextAvail = last ? last + POINTS_RESET_COOLDOWN_MS : null;
+      return { onCooldown: !!(nextAvail && nextAvail > now), nextAvail, now };
+    }
+    function refreshResetChip(){
+      const { onCooldown, nextAvail, now } = resetState();
+      resetChip.disabled = onCooldown;
+      resetChip.textContent = onCooldown ? ('On cooldown · ' + fmtCountdown(nextAvail-now)) : 'Reset';
+      resetChip.title = onCooldown ? ('Available again in ' + fmtCountdown(nextAvail-now)) : 'Reset points to 0 and start a 1-day cooldown';
+    }
+    refreshResetChip();
+    resetChip.onclick = async ()=>{
+      if(resetState().onCooldown) return;
+      const ok = await showConfirm('Reset points for '+(account.name||'this account')+' back to 0 and start a 1-day cooldown?', 'Reset');
+      if(!ok) return;
+      account.points = 0;
+      account.pointsResetAt = Date.now();
+      await saveAccounts();
+      renderAll();
+    };
 
     const manualToggle = document.createElement('div'); manualToggle.className='at-el-manual';
     manualToggle.innerHTML = '<span class="at-el-manual-label"><span class="at-el-manual-chevron">▸</span>Type exact amount</span>';
@@ -2456,9 +2478,6 @@
     const addBtn = document.createElement('button');
     addBtn.className='at-btn small'; addBtn.textContent='+ Add';
     addBtn.title = 'Add this amount to the running total';
-    const resetBtn = document.createElement('button');
-    resetBtn.className='at-btn small ghost'; resetBtn.textContent='Reset';
-    resetBtn.title = 'Reset points back to 0';
 
     setBtn.onclick = ()=>{
       const v = parseFloat(input.value);
@@ -2468,10 +2487,6 @@
       const v = parseFloat(input.value);
       if(!isNaN(v)) commit(used + v);
     };
-    resetBtn.onclick = async ()=>{
-      const ok = await showConfirm('Reset points for '+(account.name||'this account')+' back to 0?', 'Reset');
-      if(ok) commit(0);
-    };
     input.addEventListener('keydown', e=>{ if(e.key==='Enter') setBtn.click(); });
 
     manualToggle.onclick = ()=>{
@@ -2480,10 +2495,11 @@
       if(editRow.classList.contains('open')) input.focus();
     };
 
-    editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn); editRow.appendChild(resetBtn);
+    editRow.appendChild(input); editRow.appendChild(addBtn); editRow.appendChild(setBtn);
 
     wrap.appendChild(head); wrap.appendChild(bar);
     wrap.appendChild(quickRow); wrap.appendChild(manualToggle); wrap.appendChild(editRow);
+    wrap._recalc = refreshResetChip;
     return wrap;
   }
 
@@ -2923,7 +2939,7 @@
         existing.name=name; existing.role=role; existing.server=server; existing.steamGroup=steamGroup;
         existing.crop=crop; existing.tracksRelic=tracksRelic; existing.tracksUfo=tracksUfo;
       } else {
-        accounts.push({id:uid(), name, role, server, steamGroup, crop, tracksRelic, tracksUfo, relicDone:null, ufoDone:null, ufoInProgress:null, el:0, points:0, inheritDone:null, relicGcDates:[]});
+        accounts.push({id:uid(), name, role, server, steamGroup, crop, tracksRelic, tracksUfo, relicDone:null, ufoDone:null, ufoInProgress:null, el:0, points:0, inheritDone:null, pointsResetAt:null, relicGcDates:[]});
       }
       await saveAccounts();
       backdrop.remove();
