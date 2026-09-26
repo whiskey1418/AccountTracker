@@ -1712,9 +1712,12 @@
       if(xDone !== yDone) return xDone ? 1 : -1; // pending logins first, done logins sink down
       return gcKeyLabels.get(x).localeCompare(gcKeyLabels.get(y), undefined, {numeric:true});
     });
-    // Pending tab: a login with nothing left to click has nothing to show
-    // here at all, not even as a collapsed one-liner — drop it entirely.
-    if(pendingTabOnly) gcGroupKeys = gcGroupKeys.filter(key=>!steamGroupFullyDone(key));
+    // Nothing useful left to show here for a login once either: everything
+    // for it is already marked done for the period, or its shared pool has
+    // already hit the weekly GC cap (anything further would earn 0 GC
+    // anyway, so it's just clutter). Drop those out entirely rather than
+    // making the user scroll past them.
+    gcGroupKeys = gcGroupKeys.filter(key=> !steamGroupFullyDone(key) && !steamGroupCombinedGcState(key).pastCutoff);
     if(gcGroupKeys.length){
       const gcCard = document.createElement('div');
       gcCard.className = 'at-progress-card';
@@ -2084,17 +2087,20 @@
   // it's on, so those runs are easy to find in one place. 'PENDING' shows
   // every account still owing a RELIC (today) or UFO (this week) quest.
   function isAccountPending(account){
-    const relicPending = accountTracksRelic(account) && !isAccountDone(account,'relic');
+    let relicPending = accountTracksRelic(account) && !isAccountDone(account,'relic');
     let ufoPending = accountTracksUfo(account) && !isAccountDone(account,'ufo');
-    if(ufoPending){
+    if(relicPending || ufoPending){
       // Once this login's shared pool has already burned through its 5
-      // full-rate slots, remaining not-yet-done UFO accounts still need a
-      // manual Done tap (markAccountDone doesn't change) but we sink them
-      // out of the Pending tab so they stop crowding out logins that still
-      // have full-rate GC on the table. They're still visible/clickable in
-      // the GC-by-Steam-login card.
+      // full-rate slots, marking RELIC/UFO still works (the buttons stay
+      // clickable in the GC-by-Steam-login card) but there's nothing more
+      // to gain from it, so we sink both kinds of not-yet-done work out of
+      // the Pending tab — it'd just crowd out logins that still have
+      // full-rate GC on the table.
       const key = account.steamGroup ? account.steamGroup.trim() : '';
-      if(steamGroupCombinedGcState(key).pastCutoff) ufoPending = false;
+      if(steamGroupCombinedGcState(key).pastCutoff){
+        relicPending = false;
+        ufoPending = false;
+      }
     }
     return relicPending || ufoPending;
   }
