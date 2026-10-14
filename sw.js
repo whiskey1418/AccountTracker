@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zsammy-tracker-v20';
+const CACHE_NAME = 'zsammy-tracker-v21';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -31,6 +31,8 @@ self.addEventListener('notificationclick', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Let Google/Firebase requests (login + sync) go straight to the network.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetchPromise = fetch(event.request)

@@ -249,6 +249,7 @@
     border-radius:6px; transition:.15s;
   }
   .at-iconbtn:hover{color:var(--text); background:var(--surface2);}
+  .at-headbtn.on{border-color:var(--accent-dim); background:var(--accent-soft);}
 
   .at-field-row{display:flex; gap:8px; margin:10px 0; align-items:center;}
   .at-field-label{font-size:11px; color:var(--muted); width:56px; flex-shrink:0; font-family:var(--font-mono);}
@@ -861,6 +862,7 @@
       </div>
       <div class="at-scanhead-right">
         <div class="at-head-actions">
+          <button type="button" id="syncBtn" class="at-headbtn" title="Google login &amp; sync">☁️</button>
           <button type="button" id="changePwBtn" class="at-headbtn" title="Change password">🔐</button>
           <button type="button" id="lockNowBtn" class="at-headbtn" title="Lock now">🔒</button>
         </div>
@@ -1010,6 +1012,387 @@
 </div>
 
   </div>
+
+<script>
+(function(){
+  // =====================================================================
+  // OPTIONAL GOOGLE LOGIN + CLOUD SYNC (Firebase Auth + Firestore)
+  // =====================================================================
+  // Fill this in from Firebase Console -> Project settings -> Your apps (Web).
+  // See FIREBASE-SETUP.md. Leave apiKey empty to keep the app 100% local.
+  const FIREBASE_CONFIG = {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    appId: ""
+  };
+  const SDK_VERSION = '10.12.2';
+
+  // Only confirmed data syncs. In-progress drafts and device settings
+  // (notifications, lock password) intentionally stay on each device.
+  const SYNC_KEYS = [
+    'roster-accounts',
+    'deviant_order_ledger_income',
+    'deviant_order_ledger_count',
+    'deviant_order_ledger_deliveries'
+  ];
+  const META_KEY = 'zt_sync_meta';      // { key: {ts, h} } last known synced version
+  const DIRTY_KEY = 'zt_sync_dirty';    // [keys waiting to upload]
+  const UID_KEY = 'zt_sync_uid';        // account this device is linked to
+  const DEV_KEY = 'zt_device_id';
+  const BACKUP_KEY = 'zt_backup_before_sync';
+  const REDIRECT_KEY = 'zt_sync_redirect';
+
+  const configured = !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
+  const nativeSet = Storage.prototype.setItem;
+  const nativeGet = Storage.prototype.getItem;
+  const ls = {
+    get: k => { try{ return nativeGet.call(localStorage, k); }catch(e){ return null; } },
+    set: (k,v) => { try{ nativeSet.call(localStorage, k, v); }catch(e){} }
+  };
+  const readJSON = (k, d) => { try{ const v = ls.get(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } };
+
+  let deviceId = ls.get(DEV_KEY);
+  if(!deviceId){ deviceId = 'd' + Math.random().toString(36).slice(2) + Date.now().toString(36); ls.set(DEV_KEY, deviceId); }
+
+  function hash(s){
+    let h = 2166136261;
+    for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h>>>0).toString(36) + ':' + s.length;
+  }
+  let meta = readJSON(META_KEY, {});
+  let dirty = new Set(readJSON(DIRTY_KEY, []));
+  const saveMeta = () => ls.set(META_KEY, JSON.stringify(meta));
+  const saveDirty = () => ls.set(DIRTY_KEY, JSON.stringify([...dirty]));
+
+  let applyingRemote = false;
+  let user = null, db = null, auth = null, unsub = null;
+  let state = 'signedout'; // signedout | connecting | synced | syncing | offline | error
+  let lastSyncAt = 0, lastError = '';
+  let pushTimer = null, modalEl = null, linking = false;
+
+  // ---- Watch local writes to synced keys (must be installed before the app writes) ----
+  Storage.prototype.setItem = function(k, v){
+    nativeSet.call(this, k, v);
+    if(this === localStorage && !applyingRemote && SYNC_KEYS.indexOf(k) !== -1) onLocalChange(k, String(v));
+  };
+  function onLocalChange(k, v){
+    const h = hash(v);
+    if(meta[k] && meta[k].h === h) return;      // unchanged vs. last synced version -> nothing to do
+    meta[k] = { ts: Date.now(), h: h };
+    saveMeta();
+    dirty.add(k); saveDirty();
+    schedulePush();
+  }
+
+  // ---- Load Firebase only when needed (keeps the app fast + working offline) ----
+  let sdkPromise = null;
+  function loadScript(src){
+    return new Promise((res, rej)=>{
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = ()=>rej(new Error('Could not load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  function loadSdk(){
+    if(!configured) return Promise.reject(new Error('not-configured'));
+    if(sdkPromise) return sdkPromise;
+    const base = 'https://www.gstatic.com/firebasejs/' + SDK_VERSION + '/';
+    sdkPromise = (async ()=>{
+      await loadScript(base + 'firebase-app-compat.js');
+      await Promise.all([ loadScript(base + 'firebase-auth-compat.js'), loadScript(base + 'firebase-firestore-compat.js') ]);
+      if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      auth.onAuthStateChanged(onAuth);
+      auth.getRedirectResult().catch(e=>{ lastError = friendlyError(e); render(); });
+    })().catch(e=>{ sdkPromise = null; throw e; });
+    return sdkPromise;
+  }
+
+  function friendlyError(e){
+    const c = e && e.code || '';
+    if(c === 'auth/unauthorized-domain') return 'This website address is not authorized yet. Add it in Firebase → Authentication → Settings → Authorized domains.';
+    if(c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return '';
+    if(c === 'auth/network-request-failed' || (e && e.message && /Could not load/.test(e.message))) return 'No internet connection.';
+    if(c === 'permission-denied') return 'Firestore rules are blocking access. Publish the rules from FIREBASE-SETUP.md.';
+    return (e && e.message) || 'Something went wrong.';
+  }
+
+  // ---- Sign in / out ----
+  async function signIn(){
+    lastError = '';
+    try{
+      state = 'connecting'; render();
+      await loadSdk();
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      try{
+        await auth.signInWithPopup(provider);
+      }catch(e){
+        if(e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment'){
+          ls.set(REDIRECT_KEY, '1');
+          await auth.signInWithRedirect(provider);
+          return;
+        }
+        throw e;
+      }
+    }catch(e){
+      lastError = friendlyError(e);
+      state = user ? 'synced' : 'signedout';
+      render();
+    }
+  }
+  async function signOut(){
+    if(unsub){ unsub(); unsub = null; }
+    try{ await auth.signOut(); }catch(e){}
+    ls.set(UID_KEY, '');
+    user = null; state = 'signedout'; render(); updateBtn();
+  }
+
+  async function onAuth(u){
+    user = u || null;
+    if(!user){ state = 'signedout'; render(); updateBtn(); return; }
+    ls.set(REDIRECT_KEY, '');
+    state = 'syncing'; render(); updateBtn();
+    try{
+      if(ls.get(UID_KEY) !== user.uid){
+        const ok = await firstLink();
+        if(!ok){ await signOut(); return; }
+        ls.set(UID_KEY, user.uid);
+      }
+      startListener();
+      await pushDirty();
+    }catch(e){
+      lastError = friendlyError(e); state = 'error'; render(); updateBtn();
+    }
+  }
+
+  // ---- First time this device meets this Google account ----
+  const hasData = {
+    'roster-accounts': v => { try{ const a = JSON.parse(v); return Array.isArray(a) && a.length > 0; }catch(e){ return false; } },
+    'deviant_order_ledger_deliveries': v => { try{ const a = JSON.parse(v); return Array.isArray(a) && a.length > 0; }catch(e){ return false; } },
+    'deviant_order_ledger_income': v => Number(v) > 0,
+    'deviant_order_ledger_count': v => Number(v) > 0
+  };
+  function localHasData(){ return SYNC_KEYS.some(k => { const v = ls.get(k); return v != null && hasData[k](v); }); }
+  function localSnapshot(){ const o = {}; SYNC_KEYS.forEach(k=>{ const v = ls.get(k); if(v != null) o[k] = v; }); return o; }
+  function markAllLocalDirty(){
+    SYNC_KEYS.forEach(k=>{ const v = ls.get(k); if(v != null){ meta[k] = { ts: Date.now(), h: hash(v) }; dirty.add(k); } });
+    saveMeta(); saveDirty();
+  }
+
+  async function firstLink(){
+    linking = true;
+    try{
+      const col = db.collection('users').doc(user.uid).collection('kv');
+      const snap = await col.get();
+      const cloud = {};
+      snap.forEach(d => { if(SYNC_KEYS.indexOf(d.id) !== -1) cloud[d.id] = d.data(); });
+      const cloudHas = Object.keys(cloud).some(k => cloud[k].value != null && hasData[k](cloud[k].value));
+      const localHas = localHasData();
+
+      if(!cloudHas){                       // new/empty account -> bind this device's data to it
+        markAllLocalDirty();
+        toast(localHas ? 'Your data is now linked to ' + user.email : 'Signed in as ' + user.email);
+        return true;
+      }
+      if(!localHas){                       // fresh device -> just download
+        applyCloud(cloud); scheduleReload(); return true;
+      }
+      const choice = await askConflict();  // both sides have data
+      if(choice === 'cloud'){
+        ls.set(BACKUP_KEY, JSON.stringify({ at: new Date().toISOString(), data: localSnapshot() }));
+        applyCloud(cloud); scheduleReload(); return true;
+      }
+      if(choice === 'local'){ markAllLocalDirty(); return true; }
+      return false;
+    } finally { linking = false; }
+  }
+
+  function applyCloud(cloud){
+    applyingRemote = true;
+    try{
+      Object.keys(cloud).forEach(k=>{
+        const d = cloud[k]; if(d.value == null) return;
+        nativeSet.call(localStorage, k, d.value);
+        meta[k] = { ts: d.ts || Date.now(), h: hash(d.value) };
+        dirty.delete(k);
+      });
+    } finally { applyingRemote = false; }
+    saveMeta(); saveDirty();
+  }
+
+  // ---- Live sync ----
+  function startListener(){
+    if(unsub) unsub();
+    unsub = db.collection('users').doc(user.uid).collection('kv').onSnapshot(snap=>{
+      const incoming = {};
+      snap.docChanges().forEach(ch=>{
+        if(ch.type === 'removed') return;
+        const k = ch.doc.id, d = ch.doc.data();
+        if(SYNC_KEYS.indexOf(k) === -1 || d.value == null) return;
+        if(d.dev === deviceId) return;                       // my own upload echoing back
+        const cur = ls.get(k);
+        const curH = cur == null ? null : hash(cur);
+        if(curH === hash(d.value)){ meta[k] = { ts: d.ts || Date.now(), h: curH }; return; }   // already identical
+        const mine = (meta[k] && meta[k].ts) || 0;
+        if(dirty.has(k) && mine > (d.ts || 0)) return;       // my unsent change is newer -> it will overwrite
+        incoming[k] = d;
+      });
+      saveMeta();
+      if(Object.keys(incoming).length){ applyCloud(incoming); toast('Updated from another device'); scheduleReload(); }
+      if(!snap.metadata.fromCache){ lastSyncAt = Date.now(); if(!dirty.size){ state = 'synced'; } render(); updateBtn(); }
+    }, err=>{ lastError = friendlyError(err); state = 'error'; render(); updateBtn(); });
+  }
+
+  function schedulePush(){
+    if(!user || linking) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(()=>{ pushDirty(); }, 1200);
+  }
+  let pushing = false;
+  async function pushDirty(){
+    if(!user || !db || pushing) return;
+    if(!dirty.size){ if(state === 'syncing'){ state = 'synced'; lastSyncAt = lastSyncAt || Date.now(); } render(); updateBtn(); return; }
+    if(!navigator.onLine){ state = 'offline'; render(); updateBtn(); return; }
+    pushing = true; state = 'syncing'; render(); updateBtn();
+    try{
+      const col = db.collection('users').doc(user.uid).collection('kv');
+      const batch = db.batch();
+      const sent = [];
+      [...dirty].forEach(k=>{
+        const v = ls.get(k); if(v == null){ dirty.delete(k); return; }
+        const ts = (meta[k] && meta[k].ts) || Date.now();
+        batch.set(col.doc(k), { value: v, ts: ts, dev: deviceId, h: hash(v) });
+        meta[k] = { ts: ts, h: hash(v) };
+        sent.push(k);
+      });
+      if(sent.length) await batch.commit();
+      sent.forEach(k=>dirty.delete(k));
+      saveMeta(); saveDirty();
+      state = 'synced'; lastSyncAt = Date.now(); lastError = '';
+    }catch(e){
+      lastError = friendlyError(e); state = navigator.onLine ? 'error' : 'offline';
+    }finally{
+      pushing = false; render(); updateBtn();
+    }
+  }
+  window.addEventListener('online', ()=>{ if(user) pushDirty(); });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && user && dirty.size) pushDirty(); });
+  setInterval(()=>{ if(user && dirty.size) pushDirty(); }, 30000);
+
+  // The app loads its data into memory once at startup, so after another
+  // device changes something the safest move is a quick reload (otherwise the
+  // stale in-memory copy could overwrite the new data on the next save).
+  // Never interrupts someone who is typing.
+  let reloadTimer = null;
+  function scheduleReload(){
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(function tick(){
+      const a = document.activeElement;
+      if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)){ reloadTimer = setTimeout(tick, 1500); return; }
+      location.reload();
+    }, 1200);
+  }
+
+  // ---- UI ----
+  function toast(msg){
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#12161F;color:#EAF0F6;border:1px solid #1F4A3A;padding:10px 16px;border-radius:10px;font:13px system-ui,sans-serif;z-index:10001;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:90vw;';
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 3500);
+  }
+
+  function modalShell(inner){
+    const b = document.createElement('div');
+    b.className = 'at-modal-backdrop';
+    b.style.zIndex = 10000;
+    b.innerHTML = '<div class="at-modal">' + inner + '</div>';
+    document.body.appendChild(b);
+    return b;
+  }
+  function askConflict(){
+    return new Promise(resolve=>{
+      const b = modalShell(
+        '<h3>Data found on this account</h3>' +
+        '<p style="font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 6px">Both this device and your Google account already have data. Which one do you want to keep?</p>' +
+        '<div class="at-modal-actions" style="flex-direction:column;align-items:stretch;gap:8px;margin-top:14px">' +
+        '<button class="at-btn primary" data-c="cloud">Use the Google account data</button>' +
+        '<button class="at-btn" data-c="local">Replace it with this device\'s data</button>' +
+        '<button class="at-btn ghost" data-c="cancel">Cancel &amp; sign out</button></div>' +
+        '<p style="font-size:11px;color:var(--muted);margin:12px 0 0">If you pick the account data, this device\'s current data is saved as a backup first.</p>');
+      b.addEventListener('click', e=>{ const c = e.target.getAttribute && e.target.getAttribute('data-c'); if(c){ b.remove(); resolve(c); } });
+    });
+  }
+
+  function statusLine(){
+    if(state === 'connecting') return 'Connecting…';
+    if(state === 'syncing') return 'Syncing…';
+    if(state === 'offline') return 'Offline — changes will upload when you are back online';
+    if(state === 'error') return 'Sync problem — ' + (lastError || 'will retry');
+    if(state === 'synced'){
+      const t = lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
+      return 'All synced' + (t ? ' · ' + t : '');
+    }
+    return '';
+  }
+  function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function body(){
+    if(!configured){
+      return '<p style="font-size:12.5px;color:var(--muted);line-height:1.6">Google login isn\'t set up yet. Add your Firebase keys at the top of the sync script in <code>index.html</code> (see <b>FIREBASE-SETUP.md</b>). Until then the app keeps working normally on this device.</p>';
+    }
+    if(!user){
+      return '<p style="font-size:12.5px;color:var(--muted);line-height:1.6;margin:0 0 14px">Optional. Sign in with Google to back up your data and use the same accounts on other devices. Your existing data on this device is kept and linked to your Google account.</p>' +
+        '<button class="at-btn primary" id="zsSignIn" style="width:100%"' + (state==='connecting' ? ' disabled' : '') + '>' + (state==='connecting' ? 'Connecting…' : 'Sign in with Google') + '</button>' +
+        (lastError ? '<div style="color:var(--danger);font-size:11.5px;margin-top:10px;line-height:1.5">' + esc(lastError) + '</div>' : '');
+    }
+    return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
+      (user.photoURL ? '<img src="' + esc(user.photoURL) + '" referrerpolicy="no-referrer" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--line)">' : '') +
+      '<div style="min-width:0"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis">' + esc(user.displayName || 'Signed in') + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis">' + esc(user.email || '') + '</div></div></div>' +
+      '<div style="font-size:12px;color:' + (state==='error' ? 'var(--danger)' : 'var(--accent)') + ';font-family:var(--font-mono);margin-bottom:6px">' + esc(statusLine()) + '</div>' +
+      '<p style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:0 0 14px">Sign in with this same Google account on another device and your accounts and orders show up there too.</p>' +
+      '<div class="at-modal-actions"><button class="at-btn ghost" id="zsOut">Sign out</button><button class="at-btn" id="zsNow">Sync now</button></div>';
+  }
+  function render(){
+    if(!modalEl) return;
+    modalEl.querySelector('#zsBody').innerHTML = body();
+    const si = modalEl.querySelector('#zsSignIn'); if(si) si.onclick = signIn;
+    const so = modalEl.querySelector('#zsOut'); if(so) so.onclick = signOut;
+    const sn = modalEl.querySelector('#zsNow'); if(sn) sn.onclick = ()=>pushDirty();
+  }
+  function openModal(){
+    if(modalEl) return;
+    modalEl = modalShell('<h3>Google account &amp; sync</h3><div id="zsBody"></div>' +
+      '<div class="at-modal-actions" style="margin-top:14px"><button class="at-btn ghost" id="zsCloseBtn">Close</button></div>');
+    const close = ()=>{ modalEl.remove(); modalEl = null; };
+    modalEl.querySelector('#zsCloseBtn').onclick = close;
+    modalEl.addEventListener('click', e=>{ if(e.target === modalEl) close(); });
+    render();
+    if(configured && !sdkPromise) loadSdk().catch(e=>{ lastError = friendlyError(e); render(); });
+  }
+  function updateBtn(){
+    const b = document.getElementById('syncBtn'); if(!b) return;
+    b.classList.toggle('on', !!user);
+    b.title = user ? ('Synced as ' + (user.email || '') + ' — ' + statusLine()) : 'Google login & sync';
+  }
+
+  function boot(){
+    const b = document.getElementById('syncBtn');
+    if(b) b.onclick = openModal;
+    updateBtn();
+    // Resume automatically if this device was already linked (or returning from a redirect sign-in).
+    if(configured && (ls.get(UID_KEY) || ls.get(REDIRECT_KEY))){
+      state = 'connecting';
+      loadSdk().catch(()=>{ state = ls.get(UID_KEY) ? 'offline' : 'signedout'; });
+    }
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.1/umd/uuidv4.min.js"></script>
 <script>
