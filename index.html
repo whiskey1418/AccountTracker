@@ -29,6 +29,8 @@
     --warn:#FFB454;
     --danger:#FF6B6E;
     --inherit:#C9A6FF;
+    --isle:#FFB86B;
+    --isle-dim:#5A3F1F;
     --inherit-soft:rgba(201,166,255,0.14);
     --inherit-dim:#3B2E52;
     --font-display:'Space Grotesk', 'Segoe UI', sans-serif;
@@ -214,6 +216,9 @@
   .at-card.inherit::before{background:var(--inherit-dim);}
   .at-card.inherit:hover{border-color:var(--inherit-dim);}
   .at-card.inherit .at-meta{color:var(--inherit);}
+  .at-card.isle::before{background:var(--isle-dim);}
+  .at-card.isle:hover{border-color:var(--isle-dim);}
+  .at-card.isle .at-meta{color:var(--isle);}
   .at-card::after{
     content:''; position:absolute; top:10px; right:10px; width:14px; height:14px;
     border-top:1px solid var(--line); border-right:1px solid var(--line); opacity:.7;
@@ -234,7 +239,7 @@
   .at-name{font-family:var(--font-display); font-size:16px; font-weight:600; margin:0 0 4px; letter-spacing:.2px;}
   .at-meta{font-size:11px; color:var(--muted); font-family:var(--font-mono); letter-spacing:.5px;}
   .at-card.dscp .at-meta{color:var(--signal);}
-  .at-card:not(.dscp):not(.inherit) .at-meta{color:var(--accent);}
+  .at-card:not(.dscp):not(.inherit):not(.isle) .at-meta{color:var(--accent);}
   .at-badge{
     font-family:var(--font-mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
     padding:4px 9px; border-radius:6px; border:1px solid var(--line); color:var(--muted);
@@ -858,7 +863,7 @@
         <span class="at-status-pill">Live tracking</span>
         <p class="at-eyebrow">// account control</p>
         <h1 class="at-title">Zsammy Tracker</h1>
-        <p class="at-sub">EDY2, DSCP Y2 &amp; Inherit — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), EL sold (every Wednesday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
+        <p class="at-sub">EDY2, DSCP Y2, Inherit &amp; Isle of Abyss — accounts, roles, and reset windows for RELIC (daily, all servers), UFO (every Monday, EDY2 only), EL sold (every Wednesday, EDY2 only), and the 7-day Inherit Deviant cooldown.</p>
       </div>
       <div class="at-scanhead-right">
         <div class="at-head-actions">
@@ -1429,14 +1434,16 @@
     {id:'ALL', label:'All'},
     {id:'EDY2', label:'EDY2'},
     {id:'DSCPY2', label:'DSCP Y2'},
-    {id:'INHERIT', label:'Inherit'}
+    {id:'INHERIT', label:'Inherit'},
+    {id:'ISLE', label:'Isle of Abyss'}
   ];
-  const SERVER_COLOR = { EDY2:'var(--accent)', DSCPY2:'var(--signal)', INHERIT:'var(--inherit)' };
+  const SERVER_COLOR = { EDY2:'var(--accent)', DSCPY2:'var(--signal)', INHERIT:'var(--inherit)', ISLE:'var(--isle)' };
   function serverColor(server){ return SERVER_COLOR[server] || 'var(--muted)'; }
   function serverCode(server){
     if(server==='EDY2') return 'ED';
     if(server==='DSCPY2') return 'DS';
     if(server==='INHERIT') return 'IN';
+    if(server==='ISLE') return 'IA';
     return '--';
   }
   function serverDot(server){
@@ -1446,6 +1453,7 @@
     if(server==='EDY2') return 'EDY2';
     if(server==='DSCPY2') return 'DSCP Y2';
     if(server==='INHERIT') return 'Inherit (DSCP Y2)';
+    if(server==='ISLE') return 'Isle of Abyss';
     return server;
   }
   let accounts = [];
@@ -2101,13 +2109,13 @@
       return true;
     }
 
-    // When a specific server tab is active (EDY2 / DSCP Y2 / Inherit), scope
+    // When a specific server tab is active (EDY2 / DSCP Y2 / Inherit / Isle of Abyss), scope
     // this card to that server only — the shared-pool totals below still
     // read from the FULL login (the cap math has to stay correct), but which
     // logins/rows are shown is restricted so an EDY2 alt doesn't show up
     // while you're filtered to DSCP Y2, and vice versa. On ALL / PENDING /
     // INPROGRESS there's no single server in play, so nothing is restricted.
-    const activeServerFilter = (activeTab==='EDY2'||activeTab==='DSCPY2'||activeTab==='INHERIT') ? activeTab : null;
+    const activeServerFilter = (activeTab==='EDY2'||activeTab==='DSCPY2'||activeTab==='INHERIT'||activeTab==='ISLE') ? activeTab : null;
 
     const gcKeyLabels = new Map();
     accounts
@@ -2460,12 +2468,13 @@
     if(totalEl) totalEl.textContent = accounts.length;
     const breakdownEl = document.getElementById('hudBreakdown');
     if(breakdownEl){
-      const c = {EDY2:0, DSCPY2:0, INHERIT:0};
+      const c = {EDY2:0, DSCPY2:0, INHERIT:0, ISLE:0};
       accounts.forEach(a=>{ if(c[a.server]!==undefined) c[a.server]++; });
       breakdownEl.innerHTML =
         serverDot('EDY2')+'ED '+c.EDY2+
         ' <span class="at-hud-sep">·</span> '+serverDot('DSCPY2')+'DS '+c.DSCPY2+
-        ' <span class="at-hud-sep">·</span> '+serverDot('INHERIT')+'IN '+c.INHERIT;
+        ' <span class="at-hud-sep">·</span> '+serverDot('INHERIT')+'IN '+c.INHERIT+
+        ' <span class="at-hud-sep">·</span> '+serverDot('ISLE')+'IA '+c.ISLE;
     }
 
     // Total GC earned this week vs. the full-rate reference (10k) for every
@@ -2974,7 +2983,7 @@
 
   function cardNode(account){
     const card = document.createElement('div');
-    card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : (account.server==='INHERIT' ? ' inherit' : ''));
+    card.className = 'at-card' + (account.server==='DSCPY2' ? ' dscp' : (account.server==='INHERIT' ? ' inherit' : (account.server==='ISLE' ? ' isle' : '')));
 
     const head = document.createElement('div');
     head.className = 'at-cardhead';
@@ -3200,7 +3209,8 @@
   const ROLES = {
     EDY2: ['Gardener','Chef','Beastmaster'],
     DSCPY2: ['Chef','Gardener'],
-    INHERIT: ['Chef','Gardener']
+    INHERIT: ['Chef','Gardener'],
+    ISLE: ['Chef','Gardener']
   };
 
   function openAccountModal(existing){
@@ -3215,6 +3225,7 @@
           <option value="EDY2">EDY2</option>
           <option value="DSCPY2">DSCP Y2</option>
           <option value="INHERIT">Inherit (DSCP Y2)</option>
+          <option value="ISLE">Isle of Abyss</option>
         </select>
         <label>Account name</label>
         <input class="at-input" id="mName" placeholder="e.g. Main, Alt 1..." />
@@ -3281,6 +3292,8 @@
       roleSel.value = (preferredRole && options.includes(preferredRole)) ? preferredRole : options[0];
       roleHint.textContent = serverValue==='EDY2'
         ? 'Beastmaster is only available on EDY2.'
+        : serverValue==='ISLE'
+        ? 'Chef and Gardener are available on Isle of Abyss.'
         : serverValue==='INHERIT'
         ? 'Chef and Gardener are available. Inherit accounts track points and the 7-day Inherit Deviant cooldown separately from regular DSCP Y2.'
         : 'Chef and Gardener are available on DSCP Y2.';
